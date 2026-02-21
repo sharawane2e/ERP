@@ -288,7 +288,7 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
     { slNo: 6, description: 'Secondary connection bolts Pre galvanised', details: 'Bolt as per ASTM A 325, Grade 4.6' },
   ],
   drawingsDelivery: [
-    'DNSPL will issue shop Approval Drawings within 1 week from date of signing contract/issue of Purchase Order and receipt of advance payment.',
+    'RNSPL will issue shop Approval Drawings within 1 week from date of signing contract/issue of Purchase Order and receipt of advance payment.',
     'BUYER must return the accepted approval drawings preferably within 1 week thereafter; otherwise, may result in revision to delivery commitment.',
     'Anchor bolts & Layout drawings for fixing anchor bolts will be provided within 10 days from the date of receipt of Advance payment.',
     'Dispatch of materials will start as per agreed time frame from the date of receipt of signed Approval drawings with receipt of payment as per agreed terms.',
@@ -304,7 +304,7 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
     'Shelter/accommodation to be provided to the workers till completion of the work.',
   ],
   erectionScopeCompany: [
-    'Unloading and stacking of the material at site, Erection of material as per DNSPL specifications.',
+    'Unloading and stacking of the material at site, Erection of material as per RNSPL specifications.',
     'Anchor Bolt Supply & Periodic Supervision is in our Scope.',
     'Alignment of columns and rafters.',
     'Plumb and checking water level of columns & Portal frame.',
