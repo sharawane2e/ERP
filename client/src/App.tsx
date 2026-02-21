@@ -22,7 +22,11 @@ import BrandingPage from "@/pages/branding";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+function ProtectedRoute({
+  component: Component,
+}: {
+  component: React.ComponentType;
+}) {
   const { data: user, isLoading } = useUser();
 
   if (isLoading) {
@@ -45,12 +49,12 @@ function Router() {
     <Switch>
       {/* Public Routes */}
       <Route path="/" component={LoginPage} />
-      
+
       {/* Protected Routes */}
       <Route path="/dashboard">
         <ProtectedRoute component={DashboardPage} />
       </Route>
-      
+
       {/* Clients Route */}
       <Route path="/clients">
         <ProtectedRoute component={ClientsPage} />

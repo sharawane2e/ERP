@@ -2,35 +2,9 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { ensureCoreTables, normalizeLegacyQuotationText } from "./db";
-import fs from "fs";
-import path from "path";
-
-const loadEnvFile = (fileName: string) => {
-  const filePath = path.resolve(process.cwd(), fileName);
-  if (!fs.existsSync(filePath)) return;
-  const content = fs.readFileSync(filePath, "utf8");
-  content.split(/\r?\n/).forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) return;
-    const idx = trimmed.indexOf("=");
-    if (idx <= 0) return;
-    const key = trimmed.slice(0, idx).trim();
-    if (!key || process.env[key] !== undefined) return;
-    const raw = trimmed.slice(idx + 1).trim();
-    const unquoted = raw.replace(/^['"]|['"]$/g, "");
-    process.env[key] = unquoted;
-  });
-};
-
-loadEnvFile(".env");
-if (process.env.NODE_ENV === "production") {
-  loadEnvFile(".production.env");
-}
 
 const app = express();
 const httpServer = createServer(app);
-const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || "20mb";
 
 declare module "http" {
   interface IncomingMessage {
@@ -40,14 +14,14 @@ declare module "http" {
 
 app.use(
   express.json({
-    limit: REQUEST_BODY_LIMIT,
+    limit: "20mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false, limit: REQUEST_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: false, limit: "20mb" }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -87,8 +61,6 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await ensureCoreTables();
-  await normalizeLegacyQuotationText();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -119,7 +91,14 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(port, "0.0.0.0", () => {
-    log(`serving on port ${port}`);
-  });
+  httpServer.listen(
+    {
+      port,
+      host: "0.0.0.0",
+      // reusePort: true,
+    },
+    () => {
+      log(`serving on port ${port}`);
+    },
+  );
 })();
