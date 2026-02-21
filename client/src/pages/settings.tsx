@@ -50,7 +50,7 @@ export default function SettingsPage() {
   });
 
   const { data: branding, isLoading } = useQuery<Branding>({
-    queryKey: ["/api/branding"],
+    queryKey: ["/revira/api/branding"],
   });
 
   useEffect(() => {
@@ -68,14 +68,14 @@ export default function SettingsPage() {
 
   const updateSettingsMutation = useMutation({
     mutationFn: async (data: SettingsFormData) => {
-      const res = await apiRequest("PUT", "/api/branding", {
+      const res = await apiRequest("PUT", "/revira/api/branding", {
         ...branding,
         ...data,
       });
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/branding"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/branding"] });
       toast({
         title: "Settings updated",
         description: "Your company registry data has been saved successfully.",

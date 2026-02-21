@@ -66,9 +66,9 @@ export default function ClientLedgerPage() {
   });
 
   const { data: client, isLoading: clientLoading } = useQuery<Client>({
-    queryKey: ["/api/clients", clientId],
+    queryKey: ["/revira/api/clients", clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/clients/${clientId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/clients/${clientId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load client");
       return res.json();
     },
@@ -76,9 +76,9 @@ export default function ClientLedgerPage() {
   });
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery<Project[]>({
-    queryKey: ["/api/client-ledger/projects", clientId],
+    queryKey: ["/revira/api/client-ledger/projects", clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/projects`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load projects");
       const all = (await res.json()) as Project[];
       return all.filter((p) => p.clientId === clientId);
@@ -87,9 +87,9 @@ export default function ClientLedgerPage() {
   });
 
   const { data: invoices = [], isLoading: invoicesLoading } = useQuery<Invoice[]>({
-    queryKey: ["/api/client-ledger/invoices", clientId],
+    queryKey: ["/revira/api/client-ledger/invoices", clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/invoices`, { credentials: "include" });
+      const res = await fetch(`/revira/api/invoices`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load invoices");
       const all = (await res.json()) as Invoice[];
       const projectIds = new Set(projects.map((p) => p.id));
@@ -99,11 +99,11 @@ export default function ClientLedgerPage() {
   });
 
   const { data: receipts = [], isLoading: receiptsLoading } = useQuery<LedgerEntry[]>({
-    queryKey: ["/api/client-ledger/receipts", clientId, projects.map((p) => p.id).join(",")],
+    queryKey: ["/revira/api/client-ledger/receipts", clientId, projects.map((p) => p.id).join(",")],
     queryFn: async () => {
       const all = await Promise.all(
         projects.map(async (project) => {
-          const res = await fetch(`/api/projects/${project.id}/ledger/entries`, { credentials: "include" });
+          const res = await fetch(`/revira/api/projects/${project.id}/ledger/entries`, { credentials: "include" });
           if (!res.ok) return [] as LedgerEntry[];
           const entries = (await res.json()) as LedgerEntry[];
           return entries.filter((e) => e.entryType === "receipt");
@@ -134,10 +134,10 @@ export default function ClientLedgerPage() {
         utrNumber: "",
         attachmentUrl: "",
       };
-      await apiRequest("POST", `/api/projects/${receiptForm.projectId}/ledger/entries`, payload);
+      await apiRequest("POST", `/revira/api/projects/${receiptForm.projectId}/ledger/entries`, payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/client-ledger/receipts", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/client-ledger/receipts", clientId] });
       setOpenReceiptDialog(false);
       setReceiptForm({
         projectId: "",
@@ -304,7 +304,7 @@ export default function ClientLedgerPage() {
       <LayoutShell user={user}>
         <div className="text-center py-16">
           <h2 className="text-xl font-semibold text-slate-700">Client not found</h2>
-          <Button onClick={() => setLocation("/clients")} className="mt-4">Back to Clients</Button>
+          <Button onClick={() => setLocation("/revira/clients")} className="mt-4">Back to Clients</Button>
         </div>
       </LayoutShell>
     );
@@ -315,7 +315,7 @@ export default function ClientLedgerPage() {
       <div className="max-w-7xl mx-auto space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/clients")}>
+            <Button variant="ghost" size="icon" onClick={() => setLocation("/revira/clients")}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>

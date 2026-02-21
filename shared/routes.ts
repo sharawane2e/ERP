@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { users, clients, projects, quotations, quotationItems, quotationTypes, invoices, invoiceItems, gatePasses, gatePassItems, deliveryChallans, deliveryChallanItems, projectLedgerBudgets, projectLedgerEntries, branding, userRoles, userClientAssignments } from './schema';
 
+
 export const errorSchemas = {
   validation: z.object({ message: z.string() }),
   unauthorized: z.object({ message: z.string() }),
@@ -11,11 +12,11 @@ export const errorSchemas = {
 export const api = {
   auth: {
     login: {
-      method: 'POST' as const,
-      path: '/api/login',
+      method: "POST" as const,
+      path: "/revira/api/login",
       input: z.object({
         username: z.string().email("Please enter a valid email address"),
-        password: z.string().min(1, "Password is required")
+        password: z.string().min(1, "Password is required"),
       }),
       responses: {
         200: z.custom<typeof users.$inferSelect>(),
@@ -23,15 +24,15 @@ export const api = {
       },
     },
     logout: {
-      method: 'POST' as const,
-      path: '/api/logout',
+      method: "POST" as const,
+      path: "/revira/api/logout",
       responses: {
         200: z.void(),
       },
     },
     me: {
-      method: 'GET' as const,
-      path: '/api/user',
+      method: "GET" as const,
+      path: "/revira/api/user",
       responses: {
         200: z.custom<typeof users.$inferSelect>(),
         401: errorSchemas.unauthorized,
@@ -40,23 +41,23 @@ export const api = {
   },
   clients: {
     list: {
-      method: 'GET' as const,
-      path: '/api/clients',
+      method: "GET" as const,
+      path: "/revira/api/clients",
       responses: {
         200: z.array(z.custom<typeof clients.$inferSelect>()),
       },
     },
     get: {
-      method: 'GET' as const,
-      path: '/api/clients/:id',
+      method: "GET" as const,
+      path: "/revira/api/clients/:id",
       responses: {
         200: z.custom<typeof clients.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/clients',
+      method: "POST" as const,
+      path: "/revira/api/clients",
       input: z.object({
         name: z.string().min(1, "Client name is required"),
         location: z.string().min(1, "Location is required"),
@@ -71,8 +72,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/clients/:id',
+      method: "PUT" as const,
+      path: "/revira/api/clients/:id",
       input: z.object({
         name: z.string().min(1).optional(),
         location: z.string().min(1).optional(),
@@ -88,8 +89,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/clients/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/clients/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -98,28 +99,30 @@ export const api = {
   },
   projects: {
     list: {
-      method: 'GET' as const,
-      path: '/api/projects',
+      method: "GET" as const,
+      path: "/revira/api/projects",
       responses: {
         200: z.array(z.custom<typeof projects.$inferSelect>()),
       },
     },
     get: {
-      method: 'GET' as const,
-      path: '/api/projects/:id',
+      method: "GET" as const,
+      path: "/revira/api/projects/:id",
       responses: {
         200: z.custom<typeof projects.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/projects',
+      method: "POST" as const,
+      path: "/revira/api/projects",
       input: z.object({
         projectName: z.string().min(1, "Project name is required"),
         clientId: z.number().min(1, "Client selection is required"),
         location: z.string().min(1, "Location is required"),
-        quotationType: z.enum(quotationTypes, { errorMap: () => ({ message: "Quotation type is required" }) }),
+        quotationType: z.enum(quotationTypes, {
+          errorMap: () => ({ message: "Quotation type is required" }),
+        }),
       }),
       responses: {
         201: z.custom<typeof projects.$inferSelect>(),
@@ -127,8 +130,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/projects/:id',
+      method: "PUT" as const,
+      path: "/revira/api/projects/:id",
       input: z.object({
         projectName: z.string().min(1).optional(),
         clientId: z.number().min(1).optional(),
@@ -142,8 +145,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/projects/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/projects/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -152,31 +155,31 @@ export const api = {
   },
   quotations: {
     list: {
-      method: 'GET' as const,
-      path: '/api/quotations',
+      method: "GET" as const,
+      path: "/revira/api/quotations",
       responses: {
         200: z.array(z.custom<typeof quotations.$inferSelect>()),
       },
     },
     get: {
-      method: 'GET' as const,
-      path: '/api/quotations/:id',
+      method: "GET" as const,
+      path: "/revira/api/quotations/:id",
       responses: {
         200: z.custom<typeof quotations.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     getByProject: {
-      method: 'GET' as const,
-      path: '/api/projects/:projectId/quotation',
+      method: "GET" as const,
+      path: "/revira/api/projects/:projectId/quotation",
       responses: {
         200: z.custom<typeof quotations.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/quotations',
+      method: "POST" as const,
+      path: "/revira/api/quotations",
       input: z.object({
         projectId: z.number().min(1),
         quotationNumber: z.string().min(1),
@@ -203,8 +206,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/quotations/:id',
+      method: "PUT" as const,
+      path: "/revira/api/quotations/:id",
       input: z.object({
         quotationNumber: z.string().min(1).optional(),
         revision: z.string().optional(),
@@ -231,8 +234,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/quotations/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/quotations/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -241,15 +244,15 @@ export const api = {
   },
   quotationItems: {
     list: {
-      method: 'GET' as const,
-      path: '/api/quotations/:quotationId/items',
+      method: "GET" as const,
+      path: "/revira/api/quotations/:quotationId/items",
       responses: {
         200: z.array(z.custom<typeof quotationItems.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/quotations/:quotationId/items',
+      method: "POST" as const,
+      path: "/revira/api/quotations/:quotationId/items",
       input: z.object({
         serialNo: z.number().min(1),
         description: z.string().min(1),
@@ -265,8 +268,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/quotation-items/:id',
+      method: "PUT" as const,
+      path: "/revira/api/quotation-items/:id",
       input: z.object({
         serialNo: z.number().min(1).optional(),
         description: z.string().min(1).optional(),
@@ -283,8 +286,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/quotation-items/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/quotation-items/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -293,16 +296,16 @@ export const api = {
   },
   branding: {
     get: {
-      method: 'GET' as const,
-      path: '/api/branding',
+      method: "GET" as const,
+      path: "/revira/api/branding",
       responses: {
         200: z.custom<typeof branding.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/branding',
+      method: "PUT" as const,
+      path: "/revira/api/branding",
       input: z.object({
         logoUrl: z.string().optional(),
         headerUrl: z.string().optional(),
@@ -331,31 +334,31 @@ export const api = {
   },
   invoices: {
     list: {
-      method: 'GET' as const,
-      path: '/api/invoices',
+      method: "GET" as const,
+      path: "/revira/api/invoices",
       responses: {
         200: z.array(z.custom<typeof invoices.$inferSelect>()),
       },
     },
     get: {
-      method: 'GET' as const,
-      path: '/api/invoices/:id',
+      method: "GET" as const,
+      path: "/revira/api/invoices/:id",
       responses: {
         200: z.custom<typeof invoices.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     getByProject: {
-      method: 'GET' as const,
-      path: '/api/projects/:projectId/invoice',
+      method: "GET" as const,
+      path: "/revira/api/projects/:projectId/invoice",
       responses: {
         200: z.custom<typeof invoices.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/invoices',
+      method: "POST" as const,
+      path: "/revira/api/invoices",
       input: z.object({
         projectId: z.number().min(1),
         invoiceNumber: z.string().min(1),
@@ -381,8 +384,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/invoices/:id',
+      method: "PUT" as const,
+      path: "/revira/api/invoices/:id",
       input: z.object({
         invoiceNumber: z.string().min(1).optional(),
         revision: z.string().optional(),
@@ -408,8 +411,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/invoices/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/invoices/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -418,15 +421,15 @@ export const api = {
   },
   invoiceItems: {
     list: {
-      method: 'GET' as const,
-      path: '/api/invoices/:invoiceId/items',
+      method: "GET" as const,
+      path: "/revira/api/invoices/:invoiceId/items",
       responses: {
         200: z.array(z.custom<typeof invoiceItems.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/invoices/:invoiceId/items',
+      method: "POST" as const,
+      path: "/revira/api/invoices/:invoiceId/items",
       input: z.object({
         serialNo: z.number().min(1),
         description: z.string().min(1),
@@ -444,8 +447,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/invoice-items/:id',
+      method: "PUT" as const,
+      path: "/revira/api/invoice-items/:id",
       input: z.object({
         serialNo: z.number().min(1).optional(),
         description: z.string().min(1).optional(),
@@ -464,8 +467,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/invoice-items/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/invoice-items/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -474,31 +477,31 @@ export const api = {
   },
   gatePasses: {
     list: {
-      method: 'GET' as const,
-      path: '/api/gate-passes',
+      method: "GET" as const,
+      path: "/revira/api/gate-passes",
       responses: {
         200: z.array(z.custom<typeof gatePasses.$inferSelect>()),
       },
     },
     get: {
-      method: 'GET' as const,
-      path: '/api/gate-passes/:id',
+      method: "GET" as const,
+      path: "/revira/api/gate-passes/:id",
       responses: {
         200: z.custom<typeof gatePasses.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     getByProject: {
-      method: 'GET' as const,
-      path: '/api/projects/:projectId/gate-pass',
+      method: "GET" as const,
+      path: "/revira/api/projects/:projectId/gate-pass",
       responses: {
         200: z.custom<typeof gatePasses.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/gate-passes',
+      method: "POST" as const,
+      path: "/revira/api/gate-passes",
       input: z.object({
         projectId: z.number().min(1),
         gatePassNumber: z.string().min(1),
@@ -524,8 +527,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/gate-passes/:id',
+      method: "PUT" as const,
+      path: "/revira/api/gate-passes/:id",
       input: z.object({
         gatePassNumber: z.string().min(1).optional(),
         revision: z.string().optional(),
@@ -551,8 +554,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/gate-passes/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/gate-passes/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -561,15 +564,15 @@ export const api = {
   },
   gatePassItems: {
     list: {
-      method: 'GET' as const,
-      path: '/api/gate-passes/:gatePassId/items',
+      method: "GET" as const,
+      path: "/revira/api/gate-passes/:gatePassId/items",
       responses: {
         200: z.array(z.custom<typeof gatePassItems.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/gate-passes/:gatePassId/items',
+      method: "POST" as const,
+      path: "/revira/api/gate-passes/:gatePassId/items",
       input: z.object({
         serialNo: z.number().min(1),
         description: z.string().min(1),
@@ -587,8 +590,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/gate-pass-items/:id',
+      method: "PUT" as const,
+      path: "/revira/api/gate-pass-items/:id",
       input: z.object({
         serialNo: z.number().min(1).optional(),
         description: z.string().min(1).optional(),
@@ -607,8 +610,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/gate-pass-items/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/gate-pass-items/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -617,31 +620,31 @@ export const api = {
   },
   deliveryChallans: {
     list: {
-      method: 'GET' as const,
-      path: '/api/delivery-challans',
+      method: "GET" as const,
+      path: "/revira/api/delivery-challans",
       responses: {
         200: z.array(z.custom<typeof deliveryChallans.$inferSelect>()),
       },
     },
     get: {
-      method: 'GET' as const,
-      path: '/api/delivery-challans/:id',
+      method: "GET" as const,
+      path: "/revira/api/delivery-challans/:id",
       responses: {
         200: z.custom<typeof deliveryChallans.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     getByProject: {
-      method: 'GET' as const,
-      path: '/api/projects/:projectId/delivery-challan',
+      method: "GET" as const,
+      path: "/revira/api/projects/:projectId/delivery-challan",
       responses: {
         200: z.custom<typeof deliveryChallans.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/delivery-challans',
+      method: "POST" as const,
+      path: "/revira/api/delivery-challans",
       input: z.object({
         projectId: z.number().min(1),
         deliveryChallanNumber: z.string().min(1),
@@ -667,8 +670,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/delivery-challans/:id',
+      method: "PUT" as const,
+      path: "/revira/api/delivery-challans/:id",
       input: z.object({
         deliveryChallanNumber: z.string().min(1).optional(),
         revision: z.string().optional(),
@@ -694,8 +697,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/delivery-challans/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/delivery-challans/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -704,15 +707,15 @@ export const api = {
   },
   deliveryChallanItems: {
     list: {
-      method: 'GET' as const,
-      path: '/api/delivery-challans/:deliveryChallanId/items',
+      method: "GET" as const,
+      path: "/revira/api/delivery-challans/:deliveryChallanId/items",
       responses: {
         200: z.array(z.custom<typeof deliveryChallanItems.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/delivery-challans/:deliveryChallanId/items',
+      method: "POST" as const,
+      path: "/revira/api/delivery-challans/:deliveryChallanId/items",
       input: z.object({
         serialNo: z.number().min(1),
         description: z.string().min(1),
@@ -730,8 +733,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/delivery-challan-items/:id',
+      method: "PUT" as const,
+      path: "/revira/api/delivery-challan-items/:id",
       input: z.object({
         serialNo: z.number().min(1).optional(),
         description: z.string().min(1).optional(),
@@ -750,8 +753,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/delivery-challan-items/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/delivery-challan-items/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -760,15 +763,15 @@ export const api = {
   },
   ledger: {
     getBudget: {
-      method: 'GET' as const,
-      path: '/api/projects/:projectId/ledger/budget',
+      method: "GET" as const,
+      path: "/revira/api/projects/:projectId/ledger/budget",
       responses: {
         200: z.custom<typeof projectLedgerBudgets.$inferSelect>().nullable(),
       },
     },
     upsertBudget: {
-      method: 'PUT' as const,
-      path: '/api/projects/:projectId/ledger/budget',
+      method: "PUT" as const,
+      path: "/revira/api/projects/:projectId/ledger/budget",
       input: z.object({
         projectValue: z.string(),
       }),
@@ -778,15 +781,15 @@ export const api = {
       },
     },
     listEntries: {
-      method: 'GET' as const,
-      path: '/api/projects/:projectId/ledger/entries',
+      method: "GET" as const,
+      path: "/revira/api/projects/:projectId/ledger/entries",
       responses: {
         200: z.array(z.custom<typeof projectLedgerEntries.$inferSelect>()),
       },
     },
     createEntry: {
-      method: 'POST' as const,
-      path: '/api/projects/:projectId/ledger/entries',
+      method: "POST" as const,
+      path: "/revira/api/projects/:projectId/ledger/entries",
       input: z.object({
         entryDate: z.string().min(1),
         entryType: z.enum(["expense", "receipt"]),
@@ -809,8 +812,8 @@ export const api = {
       },
     },
     updateEntry: {
-      method: 'PUT' as const,
-      path: '/api/ledger-entries/:id',
+      method: "PUT" as const,
+      path: "/revira/api/ledger-entries/:id",
       input: z.object({
         entryDate: z.string().optional(),
         entryType: z.enum(["expense", "receipt"]).optional(),
@@ -834,8 +837,8 @@ export const api = {
       },
     },
     deleteEntry: {
-      method: 'DELETE' as const,
-      path: '/api/ledger-entries/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/ledger-entries/:id",
       responses: {
         204: z.void(),
         404: errorSchemas.notFound,
@@ -844,31 +847,39 @@ export const api = {
   },
   users: {
     list: {
-      method: 'GET' as const,
-      path: '/api/users',
+      method: "GET" as const,
+      path: "/revira/api/users",
       responses: {
         200: z.array(z.custom<typeof users.$inferSelect>()),
         401: errorSchemas.unauthorized,
       },
     },
     get: {
-      method: 'GET' as const,
-      path: '/api/users/:id',
+      method: "GET" as const,
+      path: "/revira/api/users/:id",
       responses: {
         200: z.custom<typeof users.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/users',
+      method: "POST" as const,
+      path: "/revira/api/users",
       input: z.object({
         username: z.string().email("Please enter a valid email address"),
         password: z.string().min(6, "Password must be at least 6 characters"),
         name: z.string().min(1, "Name is required"),
-        email: z.string().email("Please enter a valid email address").optional(),
-        mobile: z.string().min(10, "Valid mobile number is required").optional(),
-        role: z.enum(userRoles, { errorMap: () => ({ message: "Role is required" }) }),
+        email: z
+          .string()
+          .email("Please enter a valid email address")
+          .optional(),
+        mobile: z
+          .string()
+          .min(10, "Valid mobile number is required")
+          .optional(),
+        role: z.enum(userRoles, {
+          errorMap: () => ({ message: "Role is required" }),
+        }),
         assignedClientIds: z.array(z.number()).optional(),
       }),
       responses: {
@@ -879,8 +890,8 @@ export const api = {
       },
     },
     update: {
-      method: 'PUT' as const,
-      path: '/api/users/:id',
+      method: "PUT" as const,
+      path: "/revira/api/users/:id",
       input: z.object({
         username: z.string().email().optional(),
         password: z.string().min(6).optional(),
@@ -898,8 +909,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/users/:id',
+      method: "DELETE" as const,
+      path: "/revira/api/users/:id",
       responses: {
         204: z.void(),
         403: z.object({ message: z.string() }),
@@ -907,8 +918,8 @@ export const api = {
       },
     },
     getClientAssignments: {
-      method: 'GET' as const,
-      path: '/api/users/:id/clients',
+      method: "GET" as const,
+      path: "/revira/api/users/:id/clients",
       responses: {
         200: z.array(z.number()),
         404: errorSchemas.notFound,
@@ -917,7 +928,10 @@ export const api = {
   },
 };
 
-export function buildUrl(path: string, params?: Record<string, string | number>): string {
+export function buildUrl(
+  path: string,
+  params?: Record<string, string | number>,
+): string {
   let url = path;
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

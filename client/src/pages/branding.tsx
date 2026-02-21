@@ -71,7 +71,7 @@ export default function BrandingPage() {
   });
 
   const { data: branding, isLoading } = useQuery<Branding>({
-    queryKey: ["/api/branding"],
+    queryKey: ["/revira/api/branding"],
   });
 
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function BrandingPage() {
 
   const updateBrandingMutation = useMutation({
     mutationFn: async (data: BrandingFormData) => {
-      const res = await apiRequest("PUT", "/api/branding", data);
+      const res = await apiRequest("PUT", "/revira/api/branding", data);
       return res.json();
     },
     onSuccess: (updated: Branding) => {
@@ -123,7 +123,7 @@ export default function BrandingPage() {
         headOfficeAddress: updated.headOfficeAddress,
         workshopAddress: updated.workshopAddress,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/branding"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/branding"] });
       toast({
         title: "Branding updated",
         description: "Your branding settings have been saved successfully.",

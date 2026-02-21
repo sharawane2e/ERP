@@ -50,7 +50,7 @@ export function useLogin() {
         title: "Welcome back!",
         description: `Successfully logged in as ${user.name}`,
       });
-      setLocation("/dashboard");
+      setLocation("/revira/dashboard");
     },
     onError: (error: Error) => {
       toast({
@@ -77,7 +77,7 @@ export function useLogout() {
     },
     onSuccess: () => {
       queryClient.setQueryData([api.auth.me.path], null);
-      setLocation("/");
+      setLocation("/revira");
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",

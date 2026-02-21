@@ -33,38 +33,38 @@ export default function DashboardPage() {
   const [, setLocation] = useLocation();
 
   const { data: clients = [] } = useQuery<Client[]>({
-    queryKey: ["/dashboard/clients"],
-    queryFn: () => fetchList<Client>("/api/clients"),
+    queryKey: ["/revira/dashboard/clients"],
+    queryFn: () => fetchList<Client>("/revira/api/clients"),
     enabled: !!user,
   });
 
   const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ["/dashboard/projects"],
-    queryFn: () => fetchList<Project>("/api/projects"),
+    queryKey: ["/revira/dashboard/projects"],
+    queryFn: () => fetchList<Project>("/revira/api/projects"),
     enabled: !!user,
   });
 
   const { data: quotations = [] } = useQuery<Quotation[]>({
-    queryKey: ["/dashboard/quotations"],
-    queryFn: () => fetchList<Quotation>("/api/quotations"),
+    queryKey: ["/revira/dashboard/quotations"],
+    queryFn: () => fetchList<Quotation>("/revira/api/quotations"),
     enabled: !!user,
   });
 
   const { data: invoices = [] } = useQuery<Invoice[]>({
-    queryKey: ["/dashboard/invoices"],
-    queryFn: () => fetchList<Invoice>("/api/invoices"),
+    queryKey: ["/revira/dashboard/invoices"],
+    queryFn: () => fetchList<Invoice>("/revira/api/invoices"),
     enabled: !!user,
   });
 
   const { data: gatePasses = [] } = useQuery<GatePass[]>({
-    queryKey: ["/dashboard/gate-passes"],
-    queryFn: () => fetchList<GatePass>("/api/gate-passes"),
+    queryKey: ["/revira/dashboard/gate-passes"],
+    queryFn: () => fetchList<GatePass>("/revira/api/gate-passes"),
     enabled: !!user,
   });
 
   const { data: deliveryChallans = [] } = useQuery<DeliveryChallan[]>({
-    queryKey: ["/dashboard/delivery-challans"],
-    queryFn: () => fetchList<DeliveryChallan>("/api/delivery-challans"),
+    queryKey: ["/revira/dashboard/delivery-challans"],
+    queryFn: () => fetchList<DeliveryChallan>("/revira/api/delivery-challans"),
     enabled: !!user,
   });
 
@@ -178,10 +178,10 @@ export default function DashboardPage() {
             <p className="text-slate-500 mt-1">Welcome, {user?.name}. Live snapshot of projects and document flow.</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setLocation("/clients")}>
+            <Button variant="outline" onClick={() => setLocation("/revira/clients")}>
               Clients
             </Button>
-            <Button variant="outline" onClick={() => setLocation("/projects")}>
+            <Button variant="outline" onClick={() => setLocation("/revira/projects")}>
               Projects
             </Button>
           </div>
@@ -275,7 +275,7 @@ export default function DashboardPage() {
                   <span className="font-semibold">{coverage.deliveryCoverage}%</span>
                 </div>
               </div>
-              <Button className="w-full mt-2" variant="outline" onClick={() => setLocation("/projects")}>
+              <Button className="w-full mt-2" variant="outline" onClick={() => setLocation("/revira/projects")}>
                 Review Projects <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-700 flex items-center gap-2">

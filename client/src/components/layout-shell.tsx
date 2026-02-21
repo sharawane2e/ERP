@@ -32,12 +32,12 @@ export function LayoutShell({ children, user }: LayoutShellProps) {
   const { branding } = useBranding();
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Clients', href: '/clients', icon: Users },
-    { name: 'Projects', href: '/projects', icon: FolderKanban },
-    { name: 'User Management', href: '/users', icon: UserCog },
-    { name: 'Branding', href: '/branding', icon: Palette },
-    { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Dashboard', href: '/revira/dashboard', icon: LayoutDashboard },
+    { name: 'Clients', href: '/revira/clients', icon: Users },
+    { name: 'Projects', href: '/revira/projects', icon: FolderKanban },
+    { name: 'User Management', href: '/revira/users', icon: UserCog },
+    { name: 'Branding', href: '/revira/branding', icon: Palette },
+    { name: 'Settings', href: '/revira/settings', icon: Settings },
   ];
 
   const NavContent = () => (

@@ -86,9 +86,9 @@ export default function InvoicePage() {
   const { data: user } = useUser();
 
   const { data: project } = useQuery<Project>({
-    queryKey: ["/api/projects", projectId],
+    queryKey: ["/revira/api/projects", projectId],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch project");
       return res.json();
     },
@@ -96,9 +96,9 @@ export default function InvoicePage() {
   });
 
   const { data: client } = useQuery<Client>({
-    queryKey: ["/api/clients", project?.clientId],
+    queryKey: ["/revira/api/clients", project?.clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/clients/${project?.clientId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/clients/${project?.clientId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch client");
       return res.json();
     },
@@ -106,19 +106,19 @@ export default function InvoicePage() {
   });
 
   const { data: branding } = useQuery<Branding>({
-    queryKey: ["/api/branding"],
+    queryKey: ["/revira/api/branding"],
     enabled: !!user,
   });
 
   const { data: existingInvoice } = useQuery<Invoice>({
-    queryKey: ["/api/invoices", invoiceId],
+    queryKey: ["/revira/api/invoices", invoiceId],
     queryFn: async () => {
       if (invoiceId) {
-        const res = await fetch(`/api/invoices/${invoiceId}`, { credentials: "include" });
+        const res = await fetch(`/revira/api/invoices/${invoiceId}`, { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch invoice");
         return res.json();
       }
-      const res = await fetch(`/api/projects/${projectId}/invoice`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}/invoice`, { credentials: "include" });
       if (!res.ok) {
         if (res.status === 404) return null;
         throw new Error("Failed to fetch invoice");
@@ -129,9 +129,9 @@ export default function InvoicePage() {
   });
 
   const { data: existingItems } = useQuery<InvoiceItem[]>({
-    queryKey: ["/api/invoices", existingInvoice?.id, "items"],
+    queryKey: ["/revira/api/invoices", existingInvoice?.id, "items"],
     queryFn: async () => {
-      const res = await fetch(`/api/invoices/${existingInvoice?.id}/items`, { credentials: "include" });
+      const res = await fetch(`/revira/api/invoices/${existingInvoice?.id}/items`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch items");
       return res.json();
     },
@@ -139,9 +139,9 @@ export default function InvoicePage() {
   });
 
   const { data: invoiceVersions } = useQuery<Invoice[]>({
-    queryKey: ["/api/projects", projectId, "invoice-versions"],
+    queryKey: ["/revira/api/projects", projectId, "invoice-versions"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/invoice-versions`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}/invoice-versions`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
@@ -365,7 +365,7 @@ export default function InvoicePage() {
   const createInvoiceMutation = useMutation({
     mutationFn: async () => {
       const persistableLineItems = getPersistableLineItems();
-      const invoiceRes = await apiRequest("POST", "/api/invoices", {
+      const invoiceRes = await apiRequest("POST", "/revira/api/invoices", {
         projectId: Number(projectId),
         invoiceNumber: invoiceData.invoiceNumber,
         revision: invoiceData.revision,
@@ -387,7 +387,7 @@ export default function InvoicePage() {
       const invoice = await invoiceRes.json();
       
       for (const item of persistableLineItems) {
-        await apiRequest("POST", `/api/invoices/${invoice.id}/items`, {
+        await apiRequest("POST", `/revira/api/invoices/${invoice.id}/items`, {
           serialNo: item.serialNo,
           description: item.description,
           hsnCode: item.hsnCode,
@@ -403,9 +403,9 @@ export default function InvoicePage() {
       return invoice;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoice-versions"] });
-      setLocation(`/projects/${projectId}/invoice/${data.id}`);
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "invoice-versions"] });
+      setLocation(`/revira/projects/${projectId}/invoice/${data.id}`);
       toast({
         title: "Invoice saved",
         description: "The invoice has been created successfully.",
@@ -423,7 +423,7 @@ export default function InvoicePage() {
   const updateInvoiceMutation = useMutation({
     mutationFn: async () => {
       const persistableLineItems = getPersistableLineItems();
-      await apiRequest("PUT", `/api/invoices/${existingInvoice?.id}`, {
+      await apiRequest("PUT", `/revira/api/invoices/${existingInvoice?.id}`, {
         invoiceNumber: invoiceData.invoiceNumber,
         revision: invoiceData.revision,
         organisationName: invoiceData.organisationName,
@@ -444,18 +444,18 @@ export default function InvoicePage() {
 
       let itemsToDelete = existingItems || [];
       if (!itemsToDelete.length) {
-        const res = await fetch(`/api/invoices/${existingInvoice?.id}/items`, { credentials: "include" });
+        const res = await fetch(`/revira/api/invoices/${existingInvoice?.id}/items`, { credentials: "include" });
         if (res.ok) {
           itemsToDelete = await res.json();
         }
       }
 
       for (const item of itemsToDelete) {
-        await apiRequest("DELETE", `/api/invoice-items/${item.id}`);
+        await apiRequest("DELETE", `/revira/api/invoice-items/${item.id}`);
       }
 
       for (const item of persistableLineItems) {
-        await apiRequest("POST", `/api/invoices/${existingInvoice?.id}/items`, {
+        await apiRequest("POST", `/revira/api/invoices/${existingInvoice?.id}/items`, {
           serialNo: item.serialNo,
           description: item.description,
           hsnCode: item.hsnCode,
@@ -469,9 +469,9 @@ export default function InvoicePage() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices", existingInvoice?.id, "items"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoice-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/invoices", existingInvoice?.id, "items"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "invoice-versions"] });
       toast({
         title: "Invoice updated",
         description: "The invoice has been updated successfully.",
@@ -488,12 +488,12 @@ export default function InvoicePage() {
 
   const duplicateInvoiceMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/invoices/${existingInvoice?.id}/duplicate`, {});
+      const res = await apiRequest("POST", `/revira/api/invoices/${existingInvoice?.id}/duplicate`, {});
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoice-versions"] });
-      setLocation(`/projects/${projectId}/invoice/${data.id}`);
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "invoice-versions"] });
+      setLocation(`/revira/projects/${projectId}/invoice/${data.id}`);
       toast({
         title: "Invoice duplicated",
         description: `Created new version: ${data.revision}`,
@@ -510,10 +510,10 @@ export default function InvoicePage() {
 
   const deleteInvoiceMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/invoices/${id}`, undefined);
+      await apiRequest("DELETE", `/revira/api/invoices/${id}`, undefined);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "invoice-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "invoice-versions"] });
       toast({
         title: "Invoice deleted",
         description: "The invoice version has been deleted.",
@@ -522,12 +522,12 @@ export default function InvoicePage() {
       if (invoiceVersions && invoiceVersions.length > 1) {
         const remaining = invoiceVersions.filter(v => v.id !== existingInvoice?.id);
         if (remaining.length > 0) {
-          setLocation(`/projects/${projectId}/invoice/${remaining[0].id}`);
+          setLocation(`/revira/projects/${projectId}/invoice/${remaining[0].id}`);
         } else {
-          setLocation(`/projects/${projectId}/invoice`);
+          setLocation(`/revira/projects/${projectId}/invoice`);
         }
       } else {
-        setLocation(`/projects/${projectId}/invoice`);
+        setLocation(`/revira/projects/${projectId}/invoice`);
       }
     },
     onError: (error: Error) => {
@@ -1106,7 +1106,7 @@ export default function InvoicePage() {
             <Button 
               variant="ghost" 
               size="icon"
-              onClick={() => setLocation("/projects")}
+              onClick={() => setLocation("/revira/projects")}
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -1645,7 +1645,7 @@ export default function InvoicePage() {
                     : "hover:bg-slate-50"
                 }`}
                 onClick={() => {
-                  setLocation(`/projects/${projectId}/invoice/${v.id}`);
+                  setLocation(`/revira/projects/${projectId}/invoice/${v.id}`);
                   setVersionsDialogOpen(false);
                 }}
               >

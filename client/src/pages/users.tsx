@@ -75,11 +75,11 @@ export default function UsersPage() {
   const isAdmin = currentUser?.role === "Administrator";
 
   const { data: users, isLoading } = useQuery<User[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/revira/api/users"],
   });
 
   const { data: clients } = useQuery<Client[]>({
-    queryKey: ["/api/clients"],
+    queryKey: ["/revira/api/clients"],
   });
 
   const form = useForm<UserFormData>({
@@ -98,14 +98,14 @@ export default function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: UserFormData) => {
-      return apiRequest("POST", "/api/users", {
+      return apiRequest("POST", "/revira/api/users", {
         ...data,
         email: data.username,
         assignedClientIds: selectedClients,
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/users"] });
       toast({
         title: "User created",
         description: "The user has been created successfully.",
@@ -136,10 +136,10 @@ export default function UsersPage() {
       if (data.password && data.password.length >= 6) {
         payload.password = data.password;
       }
-      return apiRequest("PUT", `/api/users/${id}`, payload);
+      return apiRequest("PUT", `/revira/api/users/${id}`, payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/users"] });
       toast({
         title: "User updated",
         description: "The user has been updated successfully.",
@@ -160,10 +160,10 @@ export default function UsersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/users/${id}`);
+      return apiRequest("DELETE", `/revira/api/users/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/users"] });
       toast({
         title: "User deleted",
         description: "The user has been deleted successfully.",
@@ -190,7 +190,7 @@ export default function UsersPage() {
     
     // Fetch client assignments for this user
     try {
-      const response = await fetch(`/api/users/${user.id}/clients`);
+      const response = await fetch(`/revira/api/users/${user.id}/clients`);
       const clientIds = await response.json();
       setSelectedClients(clientIds);
     } catch {

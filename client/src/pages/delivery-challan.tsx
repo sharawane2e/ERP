@@ -140,9 +140,9 @@ export default function DeliveryChallanPage() {
   const { data: user } = useUser();
 
   const { data: project } = useQuery<Project>({
-    queryKey: ["/api/projects", projectId],
+    queryKey: ["/revira/api/projects", projectId],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch project");
       return res.json();
     },
@@ -150,9 +150,9 @@ export default function DeliveryChallanPage() {
   });
 
   const { data: client } = useQuery<Client>({
-    queryKey: ["/api/clients", project?.clientId],
+    queryKey: ["/revira/api/clients", project?.clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/clients/${project?.clientId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/clients/${project?.clientId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch client");
       return res.json();
     },
@@ -160,19 +160,19 @@ export default function DeliveryChallanPage() {
   });
 
   const { data: branding } = useQuery<Branding>({
-    queryKey: ["/api/branding"],
+    queryKey: ["/revira/api/branding"],
     enabled: !!user,
   });
 
   const { data: existingGatePass } = useQuery<DeliveryChallan | null>({
-    queryKey: ["/api/delivery-challans", deliveryChallanId],
+    queryKey: ["/revira/api/delivery-challans", deliveryChallanId],
     queryFn: async () => {
       if (deliveryChallanId) {
-        const res = await fetch(`/api/delivery-challans/${deliveryChallanId}`, { credentials: "include" });
+        const res = await fetch(`/revira/api/delivery-challans/${deliveryChallanId}`, { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch Delivery Challan");
         return res.json();
       }
-      const res = await fetch(`/api/projects/${projectId}/delivery-challan`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}/delivery-challan`, { credentials: "include" });
       if (!res.ok) {
         if (res.status === 404) return null;
         throw new Error("Failed to fetch Delivery Challan");
@@ -183,9 +183,9 @@ export default function DeliveryChallanPage() {
   });
 
   const { data: existingItems } = useQuery<DeliveryChallanItem[]>({
-    queryKey: ["/api/delivery-challans", existingGatePass?.id, "items"],
+    queryKey: ["/revira/api/delivery-challans", existingGatePass?.id, "items"],
     queryFn: async () => {
-      const res = await fetch(`/api/delivery-challans/${existingGatePass?.id}/items`, { credentials: "include" });
+      const res = await fetch(`/revira/api/delivery-challans/${existingGatePass?.id}/items`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch items");
       return res.json();
     },
@@ -193,9 +193,9 @@ export default function DeliveryChallanPage() {
   });
 
   const { data: gatePassVersions } = useQuery<DeliveryChallan[]>({
-    queryKey: ["/api/projects", projectId, "delivery-challan-versions"],
+    queryKey: ["/revira/api/projects", projectId, "delivery-challan-versions"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/delivery-challan-versions`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}/delivery-challan-versions`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
@@ -520,7 +520,7 @@ export default function DeliveryChallanPage() {
   const createGatePassMutation = useMutation({
     mutationFn: async () => {
       const persistableLineItems = getPersistableLineItems();
-      const gatePassRes = await apiRequest("POST", "/api/delivery-challans", {
+      const gatePassRes = await apiRequest("POST", "/revira/api/delivery-challans", {
         projectId: Number(projectId),
         deliveryChallanNumber: gatePassData.gatePassNumber,
         revision: gatePassData.revision,
@@ -545,7 +545,7 @@ export default function DeliveryChallanPage() {
         const item = persistableLineItems[idx];
         await apiRequest(
           "POST",
-          `/api/delivery-challans/${gatePass.id}/items`,
+          `/revira/api/delivery-challans/${gatePass.id}/items`,
           mapLineItemToApiPayload(item, idx)
         );
       }
@@ -553,9 +553,9 @@ export default function DeliveryChallanPage() {
       return gatePass;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-challans"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "delivery-challan-versions"] });
-      setLocation(`/projects/${projectId}/delivery-challan/${data.id}`);
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/delivery-challans"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "delivery-challan-versions"] });
+      setLocation(`/revira/projects/${projectId}/delivery-challan/${data.id}`);
       toast({
         title: "Delivery Challan saved",
         description: "The delivery challan has been created successfully.",
@@ -573,7 +573,7 @@ export default function DeliveryChallanPage() {
   const updateGatePassMutation = useMutation({
     mutationFn: async () => {
       const persistableLineItems = getPersistableLineItems();
-      await apiRequest("PUT", `/api/delivery-challans/${existingGatePass?.id}`, {
+      await apiRequest("PUT", `/revira/api/delivery-challans/${existingGatePass?.id}`, {
         deliveryChallanNumber: gatePassData.gatePassNumber || "RNS/PROJECT/00-00-00/RNS-DC-002",
         revision: gatePassData.revision,
         organisationName: gatePassData.consigneeName || "Company Name",
@@ -594,29 +594,29 @@ export default function DeliveryChallanPage() {
 
       let itemsToDelete = existingItems || [];
       if (!itemsToDelete.length) {
-        const res = await fetch(`/api/delivery-challans/${existingGatePass?.id}/items`, { credentials: "include" });
+        const res = await fetch(`/revira/api/delivery-challans/${existingGatePass?.id}/items`, { credentials: "include" });
         if (res.ok) {
           itemsToDelete = await res.json();
         }
       }
 
       for (const item of itemsToDelete) {
-        await apiRequest("DELETE", `/api/delivery-challan-items/${item.id}`);
+        await apiRequest("DELETE", `/revira/api/delivery-challan-items/${item.id}`);
       }
 
       for (let idx = 0; idx < persistableLineItems.length; idx++) {
         const item = persistableLineItems[idx];
         await apiRequest(
           "POST",
-          `/api/delivery-challans/${existingGatePass?.id}/items`,
+          `/revira/api/delivery-challans/${existingGatePass?.id}/items`,
           mapLineItemToApiPayload(item, idx)
         );
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-challans"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/delivery-challans", existingGatePass?.id, "items"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "delivery-challan-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/delivery-challans"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/delivery-challans", existingGatePass?.id, "items"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "delivery-challan-versions"] });
       toast({
         title: "Delivery Challan updated",
         description: "The delivery challan has been updated successfully.",
@@ -633,12 +633,12 @@ export default function DeliveryChallanPage() {
 
   const duplicateGatePassMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/delivery-challans/${existingGatePass?.id}/duplicate`, {});
+      const res = await apiRequest("POST", `/revira/api/delivery-challans/${existingGatePass?.id}/duplicate`, {});
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "delivery-challan-versions"] });
-      setLocation(`/projects/${projectId}/delivery-challan/${data.id}`);
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "delivery-challan-versions"] });
+      setLocation(`/revira/projects/${projectId}/delivery-challan/${data.id}`);
       toast({
         title: "Delivery Challan duplicated",
         description: `Created new version: ${data.revision}`,
@@ -655,10 +655,10 @@ export default function DeliveryChallanPage() {
 
   const deleteGatePassMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/delivery-challans/${id}`, undefined);
+      await apiRequest("DELETE", `/revira/api/delivery-challans/${id}`, undefined);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "delivery-challan-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "delivery-challan-versions"] });
       toast({
         title: "Delivery Challan deleted",
         description: "The delivery challan version has been deleted.",
@@ -667,12 +667,12 @@ export default function DeliveryChallanPage() {
       if (gatePassVersions && gatePassVersions.length > 1) {
         const remaining = gatePassVersions.filter(v => v.id !== existingGatePass?.id);
         if (remaining.length > 0) {
-          setLocation(`/projects/${projectId}/delivery-challan/${remaining[0].id}`);
+          setLocation(`/revira/projects/${projectId}/delivery-challan/${remaining[0].id}`);
         } else {
-          setLocation(`/projects/${projectId}/delivery-challan`);
+          setLocation(`/revira/projects/${projectId}/delivery-challan`);
         }
       } else {
-        setLocation(`/projects/${projectId}/delivery-challan`);
+        setLocation(`/revira/projects/${projectId}/delivery-challan`);
       }
     },
     onError: (error: Error) => {
@@ -1283,7 +1283,7 @@ export default function DeliveryChallanPage() {
             <Button 
               variant="ghost" 
               size="icon"
-              onClick={() => setLocation("/projects")}
+              onClick={() => setLocation("/revira/projects")}
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -1299,7 +1299,7 @@ export default function DeliveryChallanPage() {
           
           <Button
             className="bg-[#d92134] hover:bg-[#b51c2c]"
-            onClick={() => setLocation(`/projects/${projectId}/delivery-challan`)}
+            onClick={() => setLocation(`/revira/projects/${projectId}/delivery-challan`)}
             data-testid="button-new-delivery-challan"
           >
             <FileText className="w-4 h-4 mr-2" />
@@ -1697,7 +1697,7 @@ export default function DeliveryChallanPage() {
                     : "hover:bg-slate-50"
                 }`}
                 onClick={() => {
-                  setLocation(`/projects/${projectId}/delivery-challan/${v.id}`);
+                  setLocation(`/revira/projects/${projectId}/delivery-challan/${v.id}`);
                   setVersionsDialogOpen(false);
                 }}
               >

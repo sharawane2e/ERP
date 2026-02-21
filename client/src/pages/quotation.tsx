@@ -828,7 +828,7 @@ export default function QuotationPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "quotation", data.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "quotation-versions"] });
       // Navigate to the new quotation to update the URL and refetch
-      setLocation(`/projects/${projectId}/quotation/${data.id}`);
+      setLocation(`/revira/projects/${projectId}/quotation/${data.id}`);
       toast({
         title: "Quotation saved",
         description: "The quotation has been created successfully.",
@@ -908,7 +908,7 @@ export default function QuotationPage() {
         title: "Quotation duplicated",
         description: `Created new version: ${data.revision}`,
       });
-      setLocation(`/projects/${projectId}/quotation/${data.id}`);
+      setLocation(`/revira/projects/${projectId}/quotation/${data.id}`);
     },
     onError: (error: Error) => {
       toast({
@@ -2419,7 +2419,7 @@ export default function QuotationPage() {
       <LayoutShell user={user}>
         <div className="text-center py-16">
           <h2 className="text-xl font-semibold text-slate-700">Project not found</h2>
-          <Button onClick={() => setLocation("/projects")} className="mt-4">
+          <Button onClick={() => setLocation("/revira/projects")} className="mt-4">
             Back to Projects
           </Button>
         </div>
@@ -2436,7 +2436,7 @@ export default function QuotationPage() {
             <Button 
               variant="ghost" 
               size="icon"
-              onClick={() => setLocation("/projects")}
+              onClick={() => setLocation("/revira/projects")}
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -2555,9 +2555,9 @@ export default function QuotationPage() {
                       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "quotation-versions"] });
                       const remaining = quotationVersions.filter(q => q.id !== existingQuotation.id);
                       if (remaining.length > 0) {
-                        setLocation(`/projects/${projectId}/quotation/${remaining[0].id}`);
+                        setLocation(`/revira/projects/${projectId}/quotation/${remaining[0].id}`);
                       } else {
-                        setLocation(`/projects/${projectId}/quotation`);
+                        setLocation(`/revira/projects/${projectId}/quotation`);
                       }
                       toast({ title: "Quotation deleted", description: `${existingQuotation.revision} has been deleted.` });
                     } catch (error) {
@@ -3809,7 +3809,7 @@ export default function QuotationPage() {
                     variant={existingQuotation?.id === v.id ? "secondary" : "default"}
                     className={existingQuotation?.id === v.id ? "" : "bg-[#d92134] hover:bg-[#b91c2c]"}
                     onClick={() => {
-                      setLocation(`/projects/${projectId}/quotation/${v.id}`);
+                      setLocation(`/revira/projects/${projectId}/quotation/${v.id}`);
                       setVersionsDialogOpen(false);
                     }}
                     data-testid={`button-edit-version-${v.id}`}
@@ -3831,9 +3831,9 @@ export default function QuotationPage() {
                             if (existingQuotation?.id === v.id) {
                               const remaining = quotationVersions.filter(q => q.id !== v.id);
                               if (remaining.length > 0) {
-                                setLocation(`/projects/${projectId}/quotation/${remaining[0].id}`);
+                                setLocation(`/revira/projects/${projectId}/quotation/${remaining[0].id}`);
                               } else {
-                                setLocation(`/projects/${projectId}/quotation`);
+                                setLocation(`/revira/projects/${projectId}/quotation`);
                               }
                             }
                             toast({ title: "Version deleted", description: `${v.revision} has been deleted.` });

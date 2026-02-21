@@ -32,11 +32,15 @@ import { useLocation } from "wouter";
 
 const clientFormSchema = z.object({
   name: z.string().min(1, "Client name is required"),
-  location: z.string().min(1, "Location is required"),
-  gstNo: z.string().optional(),
-  contactPerson: z.string().optional(),
-  mobileNumber: z.string().optional(),
-  emailAddress: z.string().optional(),
+  // location: z.string().min(1, "Location is required"),
+  location: z.string(),
+  // gstNo: z.string().min(1, "GST No. is required"),
+  gstNo: z.string(),
+  // contactPerson: z.string().min(1, "Contact person is required"),
+  contactPerson: z.string(),
+  mobileNumber: z.string().min(10, "Valid mobile number is required"),
+  // emailAddress: z.string().email("Valid email is required"),
+  emailAddress: z.string(),
 });
 
 type ClientFormData = z.infer<typeof clientFormSchema>;
@@ -58,7 +62,7 @@ export default function ClientsPage() {
   const { data: user } = useUser();
 
   const { data: clients, isLoading } = useQuery<Client[]>({
-    queryKey: ["/api/clients"],
+    queryKey: ["/revira/api/clients"],
   });
 
   const form = useForm<ClientFormData>({
@@ -75,11 +79,15 @@ export default function ClientsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: ClientFormData) => {
-      const res = await apiRequest("POST", "/api/clients", withLegacyClientDefaults(data));
+      const res = await apiRequest(
+        "POST",
+        "/revira/api/clients",
+        withLegacyClientDefaults(data),
+      );
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/clients"] });
       form.reset();
       setOpen(false);
       toast({
@@ -98,11 +106,11 @@ export default function ClientsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: ClientFormData }) => {
-      const res = await apiRequest("PUT", `/api/clients/${id}`, data);
+      const res = await apiRequest("PUT", `/revira/api/clients/${id}`, data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/clients"] });
       form.reset();
       setEditClient(null);
       setOpen(false);
@@ -122,10 +130,10 @@ export default function ClientsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/clients/${id}`);
+      await apiRequest("DELETE", `/revira/api/clients/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/clients"] });
       toast({
         title: "Success",
         description: "Client deleted successfully",
@@ -199,13 +207,15 @@ export default function ClientsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
-              <p className="text-sm text-slate-500">Manage your client partners</p>
+              <p className="text-sm text-slate-500">
+                Manage your client partners
+              </p>
             </div>
           </div>
-          
+
           <Dialog open={open} onOpenChange={handleCloseDialog}>
             <DialogTrigger asChild>
-              <Button 
+              <Button
                 data-testid="button-add-client"
                 className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg shadow-primary/25 transition-all duration-300"
               >
@@ -215,13 +225,20 @@ export default function ClientsPage() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
-                <DialogTitle>{editClient ? "Edit Client" : "Create New Client"}</DialogTitle>
+                <DialogTitle>
+                  {editClient ? "Edit Client" : "Create New Client"}
+                </DialogTitle>
                 <DialogDescription>
-                  {editClient ? "Update client details below." : "Add a new client partner to your system."}
+                  {editClient
+                    ? "Update client details below."
+                    : "Add a new client partner to your system."}
                 </DialogDescription>
               </DialogHeader>
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-4"
+                >
                   <FormField
                     control={form.control}
                     name="name"
@@ -229,7 +246,11 @@ export default function ClientsPage() {
                       <FormItem>
                         <FormLabel>Client Name</FormLabel>
                         <FormControl>
-                          <Input data-testid="input-client-name" placeholder="Enter client name" {...field} />
+                          <Input
+                            data-testid="input-client-name"
+                            placeholder="Enter client name"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -242,7 +263,11 @@ export default function ClientsPage() {
                       <FormItem>
                         <FormLabel>Location</FormLabel>
                         <FormControl>
-                          <Input data-testid="input-location" placeholder="Enter location" {...field} />
+                          <Input
+                            data-testid="input-location"
+                            placeholder="Enter location"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -255,7 +280,11 @@ export default function ClientsPage() {
                       <FormItem>
                         <FormLabel>GST No.</FormLabel>
                         <FormControl>
-                          <Input data-testid="input-gst-no" placeholder="Enter GST number" {...field} />
+                          <Input
+                            data-testid="input-gst-no"
+                            placeholder="Enter GST number"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -268,7 +297,11 @@ export default function ClientsPage() {
                       <FormItem>
                         <FormLabel>Contact Person</FormLabel>
                         <FormControl>
-                          <Input data-testid="input-contact-person" placeholder="Enter contact person name" {...field} />
+                          <Input
+                            data-testid="input-contact-person"
+                            placeholder="Enter contact person name"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -281,7 +314,11 @@ export default function ClientsPage() {
                       <FormItem>
                         <FormLabel>Mobile Number</FormLabel>
                         <FormControl>
-                          <Input data-testid="input-mobile-number" placeholder="Enter mobile number" {...field} />
+                          <Input
+                            data-testid="input-mobile-number"
+                            placeholder="Enter mobile number"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -294,7 +331,12 @@ export default function ClientsPage() {
                       <FormItem>
                         <FormLabel>Email Address</FormLabel>
                         <FormControl>
-                          <Input data-testid="input-email-address" type="email" placeholder="Enter email address" {...field} />
+                          <Input
+                            data-testid="input-email-address"
+                            type="email"
+                            placeholder="Enter email address"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -303,12 +345,18 @@ export default function ClientsPage() {
                   <Button
                     type="submit"
                     className="w-full bg-gradient-to-r from-primary to-primary/90"
-                    disabled={createMutation.isPending || updateMutation.isPending}
+                    disabled={
+                      createMutation.isPending || updateMutation.isPending
+                    }
                     data-testid="button-submit-client"
                   >
-                    {createMutation.isPending || updateMutation.isPending 
-                      ? (editClient ? "Updating..." : "Creating...") 
-                      : (editClient ? "Update Client" : "Create Client")}
+                    {createMutation.isPending || updateMutation.isPending
+                      ? editClient
+                        ? "Updating..."
+                        : "Creating..."
+                      : editClient
+                        ? "Update Client"
+                        : "Create Client"}
                   </Button>
                 </form>
               </Form>
@@ -370,20 +418,35 @@ export default function ClientsPage() {
           {isLoading ? (
             <div className="divide-y divide-slate-100">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="grid grid-cols-12 gap-4 px-6 py-5 animate-pulse">
-                  <div className="col-span-2"><div className="h-4 bg-slate-200 rounded w-28"></div></div>
-                  <div className="col-span-2"><div className="h-4 bg-slate-200 rounded w-20"></div></div>
-                  <div className="col-span-2"><div className="h-4 bg-slate-200 rounded w-32"></div></div>
-                  <div className="col-span-2"><div className="h-4 bg-slate-200 rounded w-24"></div></div>
-                  <div className="col-span-2"><div className="h-4 bg-slate-200 rounded w-28"></div></div>
-                  <div className="col-span-2"><div className="h-4 bg-slate-200 rounded w-16 ml-auto"></div></div>
+                <div
+                  key={i}
+                  className="grid grid-cols-12 gap-4 px-6 py-5 animate-pulse"
+                >
+                  <div className="col-span-2">
+                    <div className="h-4 bg-slate-200 rounded w-28"></div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="h-4 bg-slate-200 rounded w-20"></div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="h-4 bg-slate-200 rounded w-32"></div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="h-4 bg-slate-200 rounded w-24"></div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="h-4 bg-slate-200 rounded w-28"></div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="h-4 bg-slate-200 rounded w-16 ml-auto"></div>
+                  </div>
                 </div>
               ))}
             </div>
           ) : filteredClients.length > 0 ? (
             <div className="divide-y divide-slate-100">
               {filteredClients.map((client) => (
-                <div 
+                <div
                   key={client.id}
                   data-testid={`row-client-${client.id}`}
                   className="hidden md:grid grid-cols-12 gap-4 px-6 py-5 items-center hover:bg-slate-50/50 transition-colors group"
@@ -393,12 +456,12 @@ export default function ClientsPage() {
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-400 to-blue-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">
                       <Building2 className="w-4 h-4" />
                     </div>
-                    <span 
+                    <span
                       className="font-semibold text-slate-800 uppercase text-sm"
                       data-testid={`text-client-name-${client.id}`}
                     >
-                      {client.name.length > 15 
-                        ? client.name.substring(0, 15) + '...' 
+                      {client.name.length > 15
+                        ? client.name.substring(0, 15) + "..."
                         : client.name}
                     </span>
                   </div>
@@ -406,7 +469,7 @@ export default function ClientsPage() {
                   {/* Location */}
                   <div className="col-span-2 flex items-center gap-2">
                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    <span 
+                    <span
                       className="text-slate-600 text-sm"
                       data-testid={`text-location-${client.id}`}
                     >
@@ -416,7 +479,7 @@ export default function ClientsPage() {
 
                   {/* GST No */}
                   <div className="col-span-2">
-                    <span 
+                    <span
                       className="text-slate-700 text-sm font-mono"
                       data-testid={`text-gst-${client.id}`}
                     >
@@ -426,7 +489,7 @@ export default function ClientsPage() {
 
                   {/* Contact Person */}
                   <div className="col-span-2">
-                    <span 
+                    <span
                       className="text-slate-600 text-sm"
                       data-testid={`text-contact-${client.id}`}
                     >
@@ -438,7 +501,7 @@ export default function ClientsPage() {
                   <div className="col-span-2 space-y-1">
                     <div className="flex items-center gap-2">
                       <Phone className="w-3 h-3 text-green-500" />
-                      <span 
+                      <span
                         className="text-slate-600 text-xs"
                         data-testid={`text-mobile-${client.id}`}
                       >
@@ -447,7 +510,7 @@ export default function ClientsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Mail className="w-3 h-3 text-blue-500" />
-                      <span 
+                      <span
                         className="text-slate-600 text-xs truncate max-w-[140px]"
                         data-testid={`text-email-${client.id}`}
                         title={client.emailAddress}
@@ -502,8 +565,12 @@ export default function ClientsPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-slate-900 uppercase text-sm">{client.name}</p>
-                      <p className="text-xs text-slate-500 mt-1">{client.location}</p>
+                      <p className="font-semibold text-slate-900 uppercase text-sm">
+                        {client.name}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {client.location}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1">
                       <Button
@@ -537,10 +604,21 @@ export default function ClientsPage() {
                       </Button>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-600"><span className="font-semibold">GST:</span> {client.gstNo}</p>
-                  <p className="text-xs text-slate-600"><span className="font-semibold">Contact:</span> {client.contactPerson}</p>
-                  <p className="text-xs text-slate-600"><span className="font-semibold">Mobile:</span> {client.mobileNumber}</p>
-                  <p className="text-xs text-slate-600 break-all"><span className="font-semibold">Email:</span> {client.emailAddress}</p>
+                  <p className="text-xs text-slate-600">
+                    <span className="font-semibold">GST:</span> {client.gstNo}
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    <span className="font-semibold">Contact:</span>{" "}
+                    {client.contactPerson}
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    <span className="font-semibold">Mobile:</span>{" "}
+                    {client.mobileNumber}
+                  </p>
+                  <p className="text-xs text-slate-600 break-all">
+                    <span className="font-semibold">Email:</span>{" "}
+                    {client.emailAddress}
+                  </p>
                 </div>
               ))}
             </div>
@@ -549,11 +627,13 @@ export default function ClientsPage() {
               <div className="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-primary/10 to-blue-500/10 flex items-center justify-center mb-4">
                 <Users className="w-8 h-8 text-primary/60" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-700 mb-2">No clients yet</h3>
+              <h3 className="text-lg font-semibold text-slate-700 mb-2">
+                No clients yet
+              </h3>
               <p className="text-slate-500 mb-6 max-w-sm mx-auto">
                 Get started by adding your first client partner.
               </p>
-              <Button 
+              <Button
                 onClick={() => setOpen(true)}
                 className="bg-gradient-to-r from-primary to-primary/90 shadow-lg shadow-primary/25"
               >

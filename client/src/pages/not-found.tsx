@@ -18,7 +18,7 @@ export default function NotFound() {
           </p>
           
           <div className="mt-8 flex justify-end">
-            <Link href="/">
+            <Link href="/revira">
               <Button className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
                 Return Home
               </Button>

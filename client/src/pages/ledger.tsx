@@ -136,9 +136,9 @@ export default function LedgerPage() {
   };
 
   const { data: project, isLoading: projectLoading } = useQuery<Project>({
-    queryKey: ["/api/projects", projectId],
+    queryKey: ["/revira/api/projects", projectId],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch project");
       return res.json();
     },
@@ -146,9 +146,9 @@ export default function LedgerPage() {
   });
 
   const { data: client } = useQuery<Client>({
-    queryKey: ["/api/clients", project?.clientId],
+    queryKey: ["/revira/api/clients", project?.clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/clients/${project?.clientId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/clients/${project?.clientId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch client");
       return res.json();
     },
@@ -156,9 +156,9 @@ export default function LedgerPage() {
   });
 
   const { data: budget } = useQuery<LedgerBudget>({
-    queryKey: ["/api/projects", projectId, "ledger", "budget"],
+    queryKey: ["/revira/api/projects", projectId, "ledger", "budget"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/ledger/budget`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}/ledger/budget`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch budget");
       return ensureJsonResponse(res, "Ledger budget API is unavailable. Please restart backend.");
     },
@@ -166,9 +166,9 @@ export default function LedgerPage() {
   });
 
   const { data: entries = [], isLoading: entriesLoading } = useQuery<LedgerEntry[]>({
-    queryKey: ["/api/projects", projectId, "ledger", "entries"],
+    queryKey: ["/revira/api/projects", projectId, "ledger", "entries"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/ledger/entries`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}/ledger/entries`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch ledger entries");
       return ensureJsonResponse(res, "Ledger entries API is unavailable. Please restart backend.");
     },
@@ -179,11 +179,11 @@ export default function LedgerPage() {
     mutationFn: async () => {
       const numeric = Number(String(budgetValue).replace(/,/g, "").trim());
       const safe = Number.isFinite(numeric) ? numeric : 0;
-      const res = await apiRequest("PUT", `/api/projects/${projectId}/ledger/budget`, { projectValue: String(safe) });
+      const res = await apiRequest("PUT", `/revira/api/projects/${projectId}/ledger/budget`, { projectValue: String(safe) });
       return ensureJsonResponse(res, "Ledger budget API is unavailable. Please restart backend.");
     },
     onSuccess: (saved) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "ledger", "budget"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "ledger", "budget"] });
       setBudgetValue(String(Number(saved?.projectValue || 0)));
       toast({ title: "Budget saved", description: "Project budget updated successfully." });
     },
@@ -195,15 +195,15 @@ export default function LedgerPage() {
   const addEntryMutation = useMutation({
     mutationFn: async ({ id, payload }: { id?: number; payload: Record<string, string> }) => {
       if (id) {
-        const res = await apiRequest("PUT", `/api/ledger-entries/${id}`, payload);
+        const res = await apiRequest("PUT", `/revira/api/ledger-entries/${id}`, payload);
         await ensureJsonResponse(res, "Ledger update API is unavailable. Please restart backend.");
         return;
       }
-      const res = await apiRequest("POST", `/api/projects/${projectId}/ledger/entries`, payload);
+      const res = await apiRequest("POST", `/revira/api/projects/${projectId}/ledger/entries`, payload);
       await ensureJsonResponse(res, "Ledger create API is unavailable. Please restart backend.");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "ledger", "entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "ledger", "entries"] });
       setExpenseDialogOpen(false);
       setReceiptDialogOpen(false);
       setEditingExpenseId(null);
@@ -217,10 +217,10 @@ export default function LedgerPage() {
 
   const deleteEntryMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/ledger-entries/${id}`);
+      await apiRequest("DELETE", `/revira/api/ledger-entries/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "ledger", "entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "ledger", "entries"] });
       setEntryToDelete(null);
       toast({ title: "Entry deleted", description: "Ledger entry deleted successfully." });
     },
@@ -372,7 +372,7 @@ export default function LedgerPage() {
       <div className="max-w-7xl mx-auto space-y-4 md:space-y-6 px-1 sm:px-0">
         <div className="flex items-start sm:items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/projects")}>
+            <Button variant="ghost" size="icon" onClick={() => setLocation("/revira/projects")}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>

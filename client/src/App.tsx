@@ -22,7 +22,11 @@ import BrandingPage from "@/pages/branding";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+function ProtectedRoute({
+  component: Component,
+}: {
+  component: React.ComponentType;
+}) {
   const { data: user, isLoading } = useUser();
 
   if (isLoading) {
@@ -34,7 +38,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!user) {
-    return <Redirect to="/" />;
+    return <Redirect to="/revira" />;
   }
 
   return <Component />;
@@ -44,62 +48,62 @@ function Router() {
   return (
     <Switch>
       {/* Public Routes */}
-      <Route path="/" component={LoginPage} />
-      
+      <Route path="/revira" component={LoginPage} />
+
       {/* Protected Routes */}
-      <Route path="/dashboard">
+      <Route path="/revira/dashboard">
         <ProtectedRoute component={DashboardPage} />
       </Route>
-      
+
       {/* Clients Route */}
-      <Route path="/clients">
+      <Route path="/revira/clients">
         <ProtectedRoute component={ClientsPage} />
       </Route>
 
       {/* Projects Route */}
-      <Route path="/projects">
+      <Route path="/revira/projects">
         <ProtectedRoute component={ProjectsPage} />
       </Route>
 
       {/* User Management Route */}
-      <Route path="/users">
+      <Route path="/revira/users">
         <ProtectedRoute component={UsersPage} />
       </Route>
 
       {/* Quotation Routes */}
-      <Route path="/projects/:projectId/quotation/:quotationId">
+      <Route path="/revira/projects/:projectId/quotation/:quotationId">
         <ProtectedRoute component={QuotationPage} />
       </Route>
-      <Route path="/projects/:projectId/quotation">
+      <Route path="/revira/projects/:projectId/quotation">
         <ProtectedRoute component={QuotationPage} />
       </Route>
 
       {/* Invoice Routes */}
-      <Route path="/projects/:id/invoice/:invoiceId">
+      <Route path="/revira/projects/:id/invoice/:invoiceId">
         <ProtectedRoute component={InvoicePage} />
       </Route>
-      <Route path="/projects/:id/invoice">
+      <Route path="/revira/projects/:id/invoice">
         <ProtectedRoute component={InvoicePage} />
       </Route>
 
       {/* Gate Pass Routes */}
-      <Route path="/projects/:id/gate-pass/:gatePassId">
+      <Route path="/revira/projects/:id/gate-pass/:gatePassId">
         <ProtectedRoute component={GatePassPage} />
       </Route>
-      <Route path="/projects/:id/gate-pass">
+      <Route path="/revira/projects/:id/gate-pass">
         <ProtectedRoute component={GatePassPage} />
       </Route>
 
       {/* Delivery Challan Routes */}
-      <Route path="/projects/:id/delivery-challan/:deliveryChallanId">
+      <Route path="/revira/projects/:id/delivery-challan/:deliveryChallanId">
         <ProtectedRoute component={DeliveryChallanPage} />
       </Route>
-      <Route path="/projects/:id/delivery-challan">
+      <Route path="/revira/projects/:id/delivery-challan">
         <ProtectedRoute component={DeliveryChallanPage} />
       </Route>
 
       {/* Ledger Route */}
-      <Route path="/projects/:id/ledger">
+      <Route path="/revira/projects/:id/ledger">
         <ProtectedRoute component={LedgerPage} />
       </Route>
       <Route path="/clients/:id/ledger">
@@ -107,12 +111,12 @@ function Router() {
       </Route>
 
       {/* Branding Route */}
-      <Route path="/branding">
+      <Route path="/revira/branding">
         <ProtectedRoute component={BrandingPage} />
       </Route>
 
       {/* Settings Route */}
-      <Route path="/settings">
+      <Route path="/revira/settings">
         <ProtectedRoute component={SettingsPage} />
       </Route>
 

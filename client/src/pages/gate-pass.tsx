@@ -140,9 +140,9 @@ export default function GatePassPage() {
   const { data: user } = useUser();
 
   const { data: project } = useQuery<Project>({
-    queryKey: ["/api/projects", projectId],
+    queryKey: ["/revira/api/projects", projectId],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch project");
       return res.json();
     },
@@ -150,9 +150,9 @@ export default function GatePassPage() {
   });
 
   const { data: client } = useQuery<Client>({
-    queryKey: ["/api/clients", project?.clientId],
+    queryKey: ["/revira/api/clients", project?.clientId],
     queryFn: async () => {
-      const res = await fetch(`/api/clients/${project?.clientId}`, { credentials: "include" });
+      const res = await fetch(`/revira/api/clients/${project?.clientId}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch client");
       return res.json();
     },
@@ -160,19 +160,19 @@ export default function GatePassPage() {
   });
 
   const { data: branding } = useQuery<Branding>({
-    queryKey: ["/api/branding"],
+    queryKey: ["/revira/api/branding"],
     enabled: !!user,
   });
 
   const { data: existingGatePass } = useQuery<GatePass>({
-    queryKey: ["/api/gate-passes", gatePassId],
+    queryKey: ["/revira/api/gate-passes", gatePassId],
     queryFn: async () => {
       if (gatePassId) {
-        const res = await fetch(`/api/gate-passes/${gatePassId}`, { credentials: "include" });
+        const res = await fetch(`/revira/api/gate-passes/${gatePassId}`, { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch gate pass");
         return res.json();
       }
-      const res = await fetch(`/api/projects/${projectId}/gate-pass`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}/gate-pass`, { credentials: "include" });
       if (!res.ok) {
         if (res.status === 404) return null;
         throw new Error("Failed to fetch gate pass");
@@ -183,9 +183,9 @@ export default function GatePassPage() {
   });
 
   const { data: existingItems } = useQuery<GatePassItem[]>({
-    queryKey: ["/api/gate-passes", existingGatePass?.id, "items"],
+    queryKey: ["/revira/api/gate-passes", existingGatePass?.id, "items"],
     queryFn: async () => {
-      const res = await fetch(`/api/gate-passes/${existingGatePass?.id}/items`, { credentials: "include" });
+      const res = await fetch(`/revira/api/gate-passes/${existingGatePass?.id}/items`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch items");
       return res.json();
     },
@@ -193,9 +193,9 @@ export default function GatePassPage() {
   });
 
   const { data: gatePassVersions } = useQuery<GatePass[]>({
-    queryKey: ["/api/projects", projectId, "gate-pass-versions"],
+    queryKey: ["/revira/api/projects", projectId, "gate-pass-versions"],
     queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/gate-pass-versions`, { credentials: "include" });
+      const res = await fetch(`/revira/api/projects/${projectId}/gate-pass-versions`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
     },
@@ -490,7 +490,7 @@ export default function GatePassPage() {
   const createGatePassMutation = useMutation({
     mutationFn: async () => {
       const persistableLineItems = getPersistableLineItems();
-      const gatePassRes = await apiRequest("POST", "/api/gate-passes", {
+      const gatePassRes = await apiRequest("POST", "/revira/api/gate-passes", {
         projectId: Number(projectId),
         gatePassNumber: gatePassData.gatePassNumber,
         revision: gatePassData.revision,
@@ -513,7 +513,7 @@ export default function GatePassPage() {
       
       for (let idx = 0; idx < persistableLineItems.length; idx++) {
         const item = persistableLineItems[idx];
-        await apiRequest("POST", `/api/gate-passes/${gatePass.id}/items`, {
+        await apiRequest("POST", `/revira/api/gate-passes/${gatePass.id}/items`, {
           serialNo: item.serialNo > 0 ? item.serialNo : idx + 1,
           description: item.materialDescription,
           hsnCode: item.partMark,
@@ -529,9 +529,9 @@ export default function GatePassPage() {
       return gatePass;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gate-passes"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "gate-pass-versions"] });
-      setLocation(`/projects/${projectId}/gate-pass/${data.id}`);
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/gate-passes"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "gate-pass-versions"] });
+      setLocation(`/revira/projects/${projectId}/gate-pass/${data.id}`);
       toast({
         title: "Gate Pass saved",
         description: "The gate pass has been created successfully.",
@@ -549,7 +549,7 @@ export default function GatePassPage() {
   const updateGatePassMutation = useMutation({
     mutationFn: async () => {
       const persistableLineItems = getPersistableLineItems();
-      await apiRequest("PUT", `/api/gate-passes/${existingGatePass?.id}`, {
+      await apiRequest("PUT", `/revira/api/gate-passes/${existingGatePass?.id}`, {
         gatePassNumber: gatePassData.gatePassNumber || "RNS/PROJECT/00-00-00/RNS-GT-002",
         revision: gatePassData.revision,
         organisationName: gatePassData.consigneeName || "Company Name",
@@ -570,19 +570,19 @@ export default function GatePassPage() {
 
       let itemsToDelete = existingItems || [];
       if (!itemsToDelete.length) {
-        const res = await fetch(`/api/gate-passes/${existingGatePass?.id}/items`, { credentials: "include" });
+        const res = await fetch(`/revira/api/gate-passes/${existingGatePass?.id}/items`, { credentials: "include" });
         if (res.ok) {
           itemsToDelete = await res.json();
         }
       }
 
       for (const item of itemsToDelete) {
-        await apiRequest("DELETE", `/api/gate-pass-items/${item.id}`);
+        await apiRequest("DELETE", `/revira/api/gate-pass-items/${item.id}`);
       }
 
       for (let idx = 0; idx < persistableLineItems.length; idx++) {
         const item = persistableLineItems[idx];
-        await apiRequest("POST", `/api/gate-passes/${existingGatePass?.id}/items`, {
+        await apiRequest("POST", `/revira/api/gate-passes/${existingGatePass?.id}/items`, {
           serialNo: item.serialNo > 0 ? item.serialNo : idx + 1,
           description: item.materialDescription,
           hsnCode: item.partMark,
@@ -596,9 +596,9 @@ export default function GatePassPage() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/gate-passes"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/gate-passes", existingGatePass?.id, "items"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "gate-pass-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/gate-passes"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/gate-passes", existingGatePass?.id, "items"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "gate-pass-versions"] });
       toast({
         title: "Gate Pass updated",
         description: "The gate pass has been updated successfully.",
@@ -615,12 +615,12 @@ export default function GatePassPage() {
 
   const duplicateGatePassMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/gate-passes/${existingGatePass?.id}/duplicate`, {});
+      const res = await apiRequest("POST", `/revira/api/gate-passes/${existingGatePass?.id}/duplicate`, {});
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "gate-pass-versions"] });
-      setLocation(`/projects/${projectId}/gate-pass/${data.id}`);
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "gate-pass-versions"] });
+      setLocation(`/revira/projects/${projectId}/gate-pass/${data.id}`);
       toast({
         title: "Gate Pass duplicated",
         description: `Created new version: ${data.revision}`,
@@ -637,10 +637,10 @@ export default function GatePassPage() {
 
   const deleteGatePassMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/gate-passes/${id}`, undefined);
+      await apiRequest("DELETE", `/revira/api/gate-passes/${id}`, undefined);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "gate-pass-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "gate-pass-versions"] });
       toast({
         title: "Gate Pass deleted",
         description: "The gate pass version has been deleted.",
@@ -649,12 +649,12 @@ export default function GatePassPage() {
       if (gatePassVersions && gatePassVersions.length > 1) {
         const remaining = gatePassVersions.filter(v => v.id !== existingGatePass?.id);
         if (remaining.length > 0) {
-          setLocation(`/projects/${projectId}/gate-pass/${remaining[0].id}`);
+          setLocation(`/revira/projects/${projectId}/gate-pass/${remaining[0].id}`);
         } else {
-          setLocation(`/projects/${projectId}/gate-pass`);
+          setLocation(`/revira/projects/${projectId}/gate-pass`);
         }
       } else {
-        setLocation(`/projects/${projectId}/gate-pass`);
+        setLocation(`/revira/projects/${projectId}/gate-pass`);
       }
     },
     onError: (error: Error) => {
@@ -1265,7 +1265,7 @@ export default function GatePassPage() {
             <Button 
               variant="ghost" 
               size="icon"
-              onClick={() => setLocation("/projects")}
+              onClick={() => setLocation("/revira/projects")}
               data-testid="button-back"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -1281,7 +1281,7 @@ export default function GatePassPage() {
           
           <Button
             className="bg-[#d92134] hover:bg-[#b51c2c]"
-            onClick={() => setLocation(`/projects/${projectId}/gate-pass`)}
+            onClick={() => setLocation(`/revira/projects/${projectId}/gate-pass`)}
             data-testid="button-new-gate-pass"
           >
             <FileText className="w-4 h-4 mr-2" />
@@ -1679,7 +1679,7 @@ export default function GatePassPage() {
                     : "hover:bg-slate-50"
                 }`}
                 onClick={() => {
-                  setLocation(`/projects/${projectId}/gate-pass/${v.id}`);
+                  setLocation(`/revira/projects/${projectId}/gate-pass/${v.id}`);
                   setVersionsDialogOpen(false);
                 }}
               >

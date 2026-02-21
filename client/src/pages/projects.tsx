@@ -69,11 +69,11 @@ export default function ProjectsPage() {
   const { data: user } = useUser();
 
   const { data: projects, isLoading } = useQuery<Project[]>({
-    queryKey: ["/api/projects"],
+    queryKey: ["/revira/api/projects"],
   });
 
   const { data: clients, isLoading: clientsLoading } = useQuery<Client[]>({
-    queryKey: ["/api/clients"],
+    queryKey: ["/revira/api/clients"],
   });
 
   const form = useForm<ProjectFormData>({
@@ -88,13 +88,13 @@ export default function ProjectsPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: ProjectFormData) => {
-      return apiRequest("POST", "/api/projects", {
+      return apiRequest("POST", "/revira/api/projects", {
         ...data,
         clientId: Number(data.clientId),
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects"] });
       toast({
         title: "Project created",
         description: "The project has been created successfully.",
@@ -113,13 +113,13 @@ export default function ProjectsPage() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: ProjectFormData }) => {
-      return apiRequest("PUT", `/api/projects/${id}`, {
+      return apiRequest("PUT", `/revira/api/projects/${id}`, {
         ...data,
         clientId: Number(data.clientId),
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects"] });
       toast({
         title: "Project updated",
         description: "The project has been updated successfully.",
@@ -139,10 +139,10 @@ export default function ProjectsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/projects/${id}`);
+      return apiRequest("DELETE", `/revira/api/projects/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects"] });
       toast({
         title: "Project deleted",
         description: "The project has been deleted successfully.",
@@ -525,7 +525,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50"
-                      onClick={() => setLocation(`/projects/${project.id}/quotation`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/quotation`)}
                       data-testid={`button-quotation-${project.id}`}
                       title="Create Quotation"
                     >
@@ -535,7 +535,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-green-600 hover:bg-green-50"
-                      onClick={() => setLocation(`/projects/${project.id}/invoice`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/invoice`)}
                       data-testid={`button-invoice-${project.id}`}
                       title="Create Invoice"
                     >
@@ -545,7 +545,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                      onClick={() => setLocation(`/projects/${project.id}/gate-pass`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/gate-pass`)}
                       data-testid={`button-gate-pass-${project.id}`}
                       title="Create Gate Pass"
                     >
@@ -555,7 +555,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                      onClick={() => setLocation(`/projects/${project.id}/delivery-challan`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/delivery-challan`)}
                       data-testid={`button-delivery-challan-${project.id}`}
                       title="Create Delivery Challan"
                     >
@@ -566,7 +566,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-violet-600 hover:bg-violet-50"
-                      onClick={() => setLocation(`/projects/${project.id}/ledger`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/ledger`)}
                       data-testid={`button-ledger-${project.id}`}
                       title="Open Ledger"
                     >
@@ -618,7 +618,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50"
-                      onClick={() => setLocation(`/projects/${project.id}/quotation`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/quotation`)}
                       data-testid={`button-quotation-mobile-${project.id}`}
                     >
                       <FileText className="w-4 h-4" />
@@ -627,7 +627,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-green-600 hover:bg-green-50"
-                      onClick={() => setLocation(`/projects/${project.id}/invoice`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/invoice`)}
                       data-testid={`button-invoice-mobile-${project.id}`}
                     >
                       <Receipt className="w-4 h-4" />
@@ -636,7 +636,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                      onClick={() => setLocation(`/projects/${project.id}/gate-pass`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/gate-pass`)}
                       data-testid={`button-gate-pass-mobile-${project.id}`}
                     >
                       <DoorOpen className="w-4 h-4" />
@@ -645,7 +645,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                      onClick={() => setLocation(`/projects/${project.id}/delivery-challan`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/delivery-challan`)}
                       data-testid={`button-delivery-challan-mobile-${project.id}`}
                     >
                       <ClipboardList className="w-4 h-4" />
@@ -655,7 +655,7 @@ export default function ProjectsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-violet-600 hover:bg-violet-50"
-                      onClick={() => setLocation(`/projects/${project.id}/ledger`)}
+                      onClick={() => setLocation(`/revira/projects/${project.id}/ledger`)}
                       data-testid={`button-ledger-mobile-${project.id}`}
                       title="Open Ledger"
                     >
