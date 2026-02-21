@@ -24,10 +24,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, Trash2, Pencil, Phone, Mail, MapPin, Building2, Search } from "lucide-react";
+import { Plus, Users, Trash2, Pencil, Phone, Mail, MapPin, Building2, Search, Landmark } from "lucide-react";
 import { LayoutShell } from "@/components/layout-shell";
 import { useUser } from "@/hooks/use-auth";
 import type { Client } from "@shared/schema";
+import { useLocation } from "wouter";
 
 const clientFormSchema = z.object({
   name: z.string().min(1, "Client name is required"),
@@ -52,6 +53,7 @@ export default function ClientsPage() {
   const [open, setOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { data: user } = useUser();
 
@@ -460,6 +462,16 @@ export default function ClientsPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="h-8 w-8 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                      onClick={() => setLocation(`/clients/${client.id}/ledger`)}
+                      data-testid={`button-ledger-client-${client.id}`}
+                      title="Client Ledger"
+                    >
+                      <Landmark className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-amber-600 hover:bg-amber-50"
                       onClick={() => handleEdit(client)}
                       data-testid={`button-edit-client-${client.id}`}
@@ -494,6 +506,16 @@ export default function ClientsPage() {
                       <p className="text-xs text-slate-500 mt-1">{client.location}</p>
                     </div>
                     <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                        onClick={() => setLocation(`/clients/${client.id}/ledger`)}
+                        data-testid={`button-ledger-client-mobile-${client.id}`}
+                        title="Client Ledger"
+                      >
+                        <Landmark className="w-4 h-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

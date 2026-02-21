@@ -23,7 +23,8 @@ import {
   X,
   Eye,
   MapPin,
-  GripVertical
+  Mail,
+  MessageCircle
 } from "lucide-react";
 import { LayoutShell } from "@/components/layout-shell";
 import { useUser } from "@/hooks/use-auth";
@@ -78,6 +79,19 @@ interface BankDetailRow {
   value: string;
 }
 
+interface PaymentTermSection {
+  id: string;
+  heading: string;
+  terms: string[];
+}
+
+interface DrawingUploadItem {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  dataUrl: string;
+}
+
 type AccordionBlockType =
   | "scopeBrief"
   | "scopeBasic"
@@ -90,6 +104,7 @@ type AccordionBlockType =
   | "erectionScopeClient"
   | "erectionScopeCompany"
   | "commercialPrice"
+  | "paymentTerms"
   | "commercialTerms";
 
 interface AccordionBlockInstance {
@@ -200,9 +215,95 @@ interface QuotationContentSections {
   drawingsDelivery: string[];
   erectionScopeClient: string[];
   erectionScopeCompany: string[];
+  paymentTermSections: PaymentTermSection[];
   commercialTerms: CommercialTermRow[];
   bankDetails: BankDetailRow[];
+  uploadDrawings: DrawingUploadItem[];
 }
+
+const createEmptyDrawingUpload = (): DrawingUploadItem => ({
+  id: `drawing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  fileName: "",
+  mimeType: "",
+  dataUrl: "",
+});
+
+const normalizeDrawingUploads = (value: unknown): DrawingUploadItem[] => {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [createEmptyDrawingUpload()];
+  }
+  const normalized = value
+    .filter((item): item is Partial<DrawingUploadItem> => Boolean(item && typeof item === "object"))
+    .map((item, index) => ({
+      id: typeof item.id === "string" && item.id.trim() ? item.id : `drawing-${Date.now()}-${index}`,
+      fileName: typeof item.fileName === "string" ? item.fileName : "",
+      mimeType: typeof item.mimeType === "string" ? item.mimeType : "",
+      dataUrl: typeof item.dataUrl === "string" ? item.dataUrl : "",
+    }));
+  return normalized.length > 0 ? normalized : [createEmptyDrawingUpload()];
+};
+
+const ensureDrawingUploads = (value: unknown): DrawingUploadItem[] => {
+  return normalizeDrawingUploads(value);
+};
+
+const createPaymentTermSection = (heading: string, terms: string[]): PaymentTermSection => ({
+  id: `payment-section-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  heading,
+  terms,
+});
+
+const getDefaultPaymentTermSections = (): PaymentTermSection[] => ([
+  createPaymentTermSection("Supply and Erection", [
+    "20% advance on confirmation of order/PO.",
+    "40% after finalisation & submission of GA drawing.",
+    "30% before dispatch of material.",
+    "5% after Structure Erection.",
+    "5% after Building Handing over.",
+  ]),
+  createPaymentTermSection("Civil Construction", [
+    "20% Advance along with PO",
+    "40% on GA drawing Approval",
+    "20% Excavation, PCC and Fiiling",
+    "10% on Plinth & RCC floor completion",
+    "5% on brickwork completion",
+    "5% on handingover",
+  ]),
+]);
+
+const normalizePaymentTermSections = (value: unknown, fallbackTerms?: string[]): PaymentTermSection[] => {
+  const normalizedHeading = (heading: string, index: number) => {
+    const h = heading.trim();
+    if (!h) return `Heading ${index + 1}`;
+    if (h.toLowerCase() === "peb - supply and erection") return "Supply and Erection";
+    return h;
+  };
+  if (Array.isArray(value) && value.length > 0) {
+    const sections = value
+      .filter((item): item is Partial<PaymentTermSection> => Boolean(item && typeof item === "object"))
+      .map((item, index) => ({
+        id: typeof item.id === "string" && item.id.trim() ? item.id : `payment-section-${Date.now()}-${index}`,
+        heading: normalizedHeading(typeof item.heading === "string" ? item.heading : "", index),
+        terms: Array.isArray(item.terms) ? item.terms.filter((t): t is string => typeof t === "string") : [],
+      }))
+      .filter((item) => item.terms.length > 0 || item.heading.trim().length > 0);
+    if (sections.length > 0) return sections;
+  }
+  if (Array.isArray(fallbackTerms) && fallbackTerms.length > 0) {
+    return [
+      createPaymentTermSection("Supply and Erection", fallbackTerms),
+      createPaymentTermSection("Civil Construction", [
+        "20% Advance along with PO",
+        "40% on GA drawing Approval",
+        "20% Excavation, PCC and Fiiling",
+        "10% on Plinth & RCC floor completion",
+        "5% on brickwork completion",
+        "5% on handingover",
+      ]),
+    ];
+  }
+  return getDefaultPaymentTermSections();
+};
 
 const defaultSupplyFabricationContent: QuotationContentSections = {
   proposalTitle: 'Techno-Commercial Offer',
@@ -312,6 +413,7 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
     'Alignment of Purlins and Girts.',
     'Fixing of roof sheeting, wall sheeting and accessories.',
   ],
+  paymentTermSections: getDefaultPaymentTermSections(),
   commercialTerms: [
     { slNo: 1, description: 'Payment Terms including taxes', conditions: 'Supply and Erection amount: 1. 20% advance on confirmation of order/PO. 2. 40% after finalisation & submission of GA drawing. 3. 30% before dispatch of material. 4. 5% after Structure Erection. 5. 5% after Building Handing over.' },
     { slNo: 2, description: 'Delivery period', conditions: 'Delivery as per mutually agreed from the date of receipt of signed approved drawings and receipt of payment as per agreed terms.' },
@@ -337,6 +439,7 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
     { particular: 'A/C No.', value: '073361900002657' },
     { particular: 'IFSC Code', value: 'YESB0000733' },
   ],
+  uploadDrawings: [createEmptyDrawingUpload()],
 };
 
 const SUPPLY_ACCORDION_BLOCK_TYPES: AccordionBlockType[] = [
@@ -351,10 +454,11 @@ const SUPPLY_ACCORDION_BLOCK_TYPES: AccordionBlockType[] = [
   "erectionScopeClient",
   "erectionScopeCompany",
   "commercialPrice",
+  "paymentTerms",
   "commercialTerms",
 ];
 
-const NON_SUPPLY_ACCORDION_BLOCK_TYPES: AccordionBlockType[] = ["commercialPrice"];
+const NON_SUPPLY_ACCORDION_BLOCK_TYPES: AccordionBlockType[] = ["commercialPrice", "paymentTerms"];
 
 const BLOCK_LABELS: Record<AccordionBlockType, string> = {
   scopeBrief: "SCOPE OF SUPPLY - BRIEF DETAILS",
@@ -367,7 +471,8 @@ const BLOCK_LABELS: Record<AccordionBlockType, string> = {
   drawingsDelivery: "DRAWINGS & DELIVERY",
   erectionScopeClient: "ERECTION SCOPES - SCOPE OF CLIENT",
   erectionScopeCompany: "ERECTION SCOPES - SCOPE OF COMPANY",
-  commercialPrice: "COMMERCIAL PRICE & PAYMENT TERMS",
+  commercialPrice: "COMMERCIAL PRICE & PAYMENT",
+  paymentTerms: "PAYMENT TERMS",
   commercialTerms: "COMMERCIAL TERMS & CONDITIONS",
 };
 
@@ -382,7 +487,8 @@ const BLOCK_INDEX_TITLES: Record<AccordionBlockType, string> = {
   drawingsDelivery: "Drawings & Delivery",
   erectionScopeClient: "Erection Scopes - Scope of Client",
   erectionScopeCompany: "Erection Scopes - Scope of Company",
-  commercialPrice: "Commercial Price & Payment Terms",
+  commercialPrice: "Commercial Price & Payment",
+  paymentTerms: "Payment Terms",
   commercialTerms: "Commercial Terms & Conditions",
 };
 
@@ -431,7 +537,9 @@ export default function QuotationPage() {
   const [contentSections, setContentSections] = useState<QuotationContentSections>(defaultSupplyFabricationContent);
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<number | null>(null);
-  const [editingPaymentTerm, setEditingPaymentTerm] = useState<number | null>(null);
+  const [editingPaymentTermHeading, setEditingPaymentTermHeading] = useState<string | null>(null);
+  const [editingPaymentTermItem, setEditingPaymentTermItem] = useState<{ sectionId: string; termIndex: number } | null>(null);
+  const [expandedPaymentTermSections, setExpandedPaymentTermSections] = useState<Record<string, boolean>>({});
   const [editingDrawingsDelivery, setEditingDrawingsDelivery] = useState<number | null>(null);
   const [editingErectionClient, setEditingErectionClient] = useState<number | null>(null);
   const [editingErectionCompany, setEditingErectionCompany] = useState<number | null>(null);
@@ -439,8 +547,21 @@ export default function QuotationPage() {
   const [editingCommercialTerm, setEditingCommercialTerm] = useState<number | null>(null);
   const [editingBankDetail, setEditingBankDetail] = useState<number | null>(null);
   const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [emailForm, setEmailForm] = useState({
+    to: "",
+    subject: "",
+    message: "",
+  });
+  const [whatsAppForm, setWhatsAppForm] = useState({
+    mobile: "",
+    message: "",
+  });
+  const [editingAccordionBlockId, setEditingAccordionBlockId] = useState<string | null>(null);
   const [accordionBlocks, setAccordionBlocks] = useState<AccordionBlockInstance[]>([]);
   const [expandedBlockIds, setExpandedBlockIds] = useState<Record<string, boolean>>({});
 
@@ -527,13 +648,39 @@ export default function QuotationPage() {
         typeof (b as AccordionBlockInstance).id === "string" &&
         typeof (b as AccordionBlockInstance).type === "string"
       ))
-      .filter((b) => allowed.has(b.type));
+      .filter((b) => allowed.has(b.type))
+      .map((b) => ({
+        id: b.id,
+        type: b.type,
+        heading: typeof b.heading === "string" && b.heading.trim().length > 0 ? b.heading : BLOCK_LABELS[b.type],
+      }));
 
-    return normalized.map((b) => ({
-      id: b.id,
-      type: b.type,
-      heading: typeof b.heading === "string" && b.heading.trim().length > 0 ? b.heading : BLOCK_LABELS[b.type],
-    }));
+    // Ensure Payment Terms block is present for all quotation types.
+    if (!normalized.some((b) => b.type === "paymentTerms") && allowed.has("paymentTerms")) {
+      const paymentTermsBlock: AccordionBlockInstance = {
+        id: `paymentTerms-${Date.now()}`,
+        type: "paymentTerms",
+        heading: BLOCK_LABELS.paymentTerms,
+      };
+      const commercialPriceIndex = normalized.findIndex((b) => b.type === "commercialPrice");
+      if (commercialPriceIndex >= 0) {
+        normalized.splice(commercialPriceIndex + 1, 0, paymentTermsBlock);
+      } else {
+        normalized.push(paymentTermsBlock);
+      }
+    }
+
+    return normalized.map((block) => {
+      if (block.type !== "commercialPrice") return block;
+      const normalizedHeading = block.heading.trim().toUpperCase();
+      if (
+        normalizedHeading === "COMMERCIAL PRICE" ||
+        normalizedHeading === "COMMERCIAL PRICE & PAYMENT TERMS"
+      ) {
+        return { ...block, heading: "COMMERCIAL PRICE & PAYMENT" };
+      }
+      return block;
+    });
   }, [getAllowedBlockTypes, project?.quotationType]);
 
   useEffect(() => {
@@ -567,7 +714,15 @@ export default function QuotationPage() {
       if (existingQuotation.contentSections) {
         try {
           parsedContentSections = JSON.parse(existingQuotation.contentSections);
-          setContentSections(prev => ({ ...prev, ...parsedContentSections }));
+          const legacyPaymentTerms = Array.isArray((parsedContentSections as any)?.paymentTerms)
+            ? (parsedContentSections as any).paymentTerms.filter((t: unknown): t is string => typeof t === "string")
+            : [];
+          setContentSections(prev => ({
+            ...prev,
+            ...parsedContentSections,
+            paymentTermSections: normalizePaymentTermSections((parsedContentSections as any)?.paymentTermSections, legacyPaymentTerms),
+            uploadDrawings: normalizeDrawingUploads((parsedContentSections as any)?.uploadDrawings),
+          }));
           setAccordionBlocks(normalizeAccordionBlocks(parsedContentSections?.accordionBlocks));
         } catch (e) {
           console.error("Failed to parse content sections:", e);
@@ -625,6 +780,17 @@ export default function QuotationPage() {
       return next;
     });
   }, [accordionBlocks]);
+
+  useEffect(() => {
+    const sections = normalizePaymentTermSections(contentSections.paymentTermSections, contentSections.paymentTerms);
+    setExpandedPaymentTermSections((prev) => {
+      const next: Record<string, boolean> = {};
+      sections.forEach((section) => {
+        next[section.id] = prev[section.id] ?? true;
+      });
+      return next;
+    });
+  }, [contentSections.paymentTermSections, contentSections.paymentTerms]);
 
   const createQuotationMutation = useMutation({
     mutationFn: async () => {
@@ -860,25 +1026,65 @@ export default function QuotationPage() {
     }));
   };
 
-  const addPaymentTerm = () => {
+  const addPaymentTermSection = () => {
     setContentSections(prev => ({
       ...prev,
-      paymentTerms: [...prev.paymentTerms, 'New payment term...']
-    }));
-    setEditingPaymentTerm(contentSections.paymentTerms.length);
-  };
-
-  const updatePaymentTerm = (index: number, content: string) => {
-    setContentSections(prev => ({
-      ...prev,
-      paymentTerms: prev.paymentTerms.map((t, i) => i === index ? content : t)
+      paymentTermSections: [...normalizePaymentTermSections(prev.paymentTermSections), createPaymentTermSection("New Heading", ["New payment term..."])],
     }));
   };
 
-  const removePaymentTerm = (index: number) => {
+  const updatePaymentTermSectionHeading = (sectionId: string, heading: string) => {
     setContentSections(prev => ({
       ...prev,
-      paymentTerms: prev.paymentTerms.filter((_, i) => i !== index)
+      paymentTermSections: normalizePaymentTermSections(prev.paymentTermSections).map((section) =>
+        section.id === sectionId ? { ...section, heading } : section
+      ),
+    }))
+  };
+
+  const removePaymentTermSection = (sectionId: string) => {
+    setContentSections(prev => ({
+      ...prev,
+      paymentTermSections: (() => {
+        const next = normalizePaymentTermSections(prev.paymentTermSections).filter((section) => section.id !== sectionId);
+        return next.length > 0 ? next : [createPaymentTermSection("New Heading", ["New payment term..."])];
+      })(),
+    }));
+  };
+
+  const addPaymentTerm = (sectionId: string) => {
+    setContentSections(prev => ({
+      ...prev,
+      paymentTermSections: normalizePaymentTermSections(prev.paymentTermSections).map((section) =>
+        section.id === sectionId
+          ? { ...section, terms: [...section.terms, "New payment term..."] }
+          : section
+      ),
+    }));
+  };
+
+  const updatePaymentTerm = (sectionId: string, termIndex: number, content: string) => {
+    setContentSections(prev => ({
+      ...prev,
+      paymentTermSections: normalizePaymentTermSections(prev.paymentTermSections).map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              terms: section.terms.map((term, index) => (index === termIndex ? content : term)),
+            }
+          : section
+      ),
+    }));
+  };
+
+  const removePaymentTerm = (sectionId: string, termIndex: number) => {
+    setContentSections(prev => ({
+      ...prev,
+      paymentTermSections: normalizePaymentTermSections(prev.paymentTermSections).map((section) =>
+        section.id === sectionId
+          ? { ...section, terms: section.terms.filter((_, index) => index !== termIndex) }
+          : section
+      ),
     }));
   };
 
@@ -1026,6 +1232,66 @@ export default function QuotationPage() {
     }));
   };
 
+  const handleDrawingUploadChange = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isImage = file.type.startsWith("image/");
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!isImage && !isPdf) {
+      toast({
+        title: "Unsupported file type",
+        description: "Please upload an image or a PDF file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload a file smaller than 10MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const value = typeof reader.result === "string" ? reader.result : "";
+      setContentSections((prev) => ({
+        ...prev,
+        uploadDrawings: ensureDrawingUploads(prev.uploadDrawings).map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                fileName: file.name,
+                mimeType: isPdf ? "application/pdf" : file.type || "image/png",
+                dataUrl: value,
+              }
+            : item
+        ),
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const addDrawingUploadField = () => {
+    setContentSections((prev) => ({
+      ...prev,
+      uploadDrawings: [...ensureDrawingUploads(prev.uploadDrawings), createEmptyDrawingUpload()],
+    }));
+  };
+
+  const removeDrawingUploadField = (id: string) => {
+    setContentSections((prev) => {
+      const next = ensureDrawingUploads(prev.uploadDrawings).filter((item) => item.id !== id);
+      return {
+        ...prev,
+        uploadDrawings: next.length > 0 ? next : [createEmptyDrawingUpload()],
+      };
+    });
+  };
+
   const updateScopeRow = useCallback((section: string, index: number, field: 'description' | 'details', value: string) => {
     setContentSections(prev => ({
       ...prev,
@@ -1117,14 +1383,6 @@ export default function QuotationPage() {
     );
   }, []);
 
-  const handleBlockDrop = useCallback((targetId: string) => {
-    if (!draggingBlockId || draggingBlockId === targetId) return;
-    const fromIndex = accordionBlocks.findIndex((b) => b.id === draggingBlockId);
-    const toIndex = accordionBlocks.findIndex((b) => b.id === targetId);
-    moveAccordionBlock(fromIndex, toIndex);
-    setDraggingBlockId(null);
-  }, [accordionBlocks, draggingBlockId, moveAccordionBlock]);
-
   const getBlockInstances = useCallback(
     (type: AccordionBlockType) => accordionBlocks.filter((block) => block.type === type),
     [accordionBlocks]
@@ -1135,7 +1393,43 @@ export default function QuotationPage() {
     [accordionBlocks]
   );
 
-  const handleExportPDF = async () => {
+  const getBlockHeaderProps = useCallback((block: AccordionBlockInstance) => {
+    const index = getBlockOrder(block.id);
+    const isEditingHeading = editingAccordionBlockId === block.id;
+    return {
+      isEditingHeading,
+      onStartEditHeading: () => setEditingAccordionBlockId(block.id),
+      onHeadingChange: (value: string) => updateAccordionBlockHeading(block.id, value),
+      onHeadingBlur: () => {
+        const target = accordionBlocks.find((b) => b.id === block.id);
+        if (target && !target.heading.trim()) {
+          updateAccordionBlockHeading(block.id, BLOCK_LABELS[block.type]);
+        }
+        setEditingAccordionBlockId(null);
+      },
+      onMoveUp: index > 0 ? () => moveAccordionBlock(index, index - 1) : undefined,
+      onMoveDown: index >= 0 && index < accordionBlocks.length - 1 ? () => moveAccordionBlock(index, index + 1) : undefined,
+      onDuplicate: () => duplicateAccordionBlock(block.id),
+      onDelete: () => removeAccordionBlock(block.id),
+      canMoveUp: index > 0,
+      canMoveDown: index >= 0 && index < accordionBlocks.length - 1,
+    };
+  }, [
+    accordionBlocks,
+    duplicateAccordionBlock,
+    editingAccordionBlockId,
+    getBlockOrder,
+    moveAccordionBlock,
+    removeAccordionBlock,
+    updateAccordionBlockHeading,
+  ]);
+
+  const handleExportPDF = async (
+    options?: { save?: boolean; silent?: boolean; returnDataUri?: boolean }
+  ): Promise<{ filename: string; dataUri?: string } | null> => {
+    const save = options?.save ?? true;
+    const silent = options?.silent ?? false;
+    const returnDataUri = options?.returnDataUri ?? false;
     setIsExporting(true);
     try {
       const pdf = new jsPDF({
@@ -1316,6 +1610,84 @@ export default function QuotationPage() {
         });
         currentY += 1.5;
       };
+
+      const getPdfJsLib = async () => {
+        const fromWindow = (window as any).pdfjsLib;
+        if (fromWindow) {
+          return fromWindow;
+        }
+        await new Promise<void>((resolve, reject) => {
+          const existingScript = document.querySelector<HTMLScriptElement>('script[data-pdfjs="true"]');
+          if (existingScript) {
+            existingScript.addEventListener("load", () => resolve(), { once: true });
+            existingScript.addEventListener("error", () => reject(new Error("Failed to load PDF renderer.")), { once: true });
+            return;
+          }
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+          script.async = true;
+          script.dataset.pdfjs = "true";
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Failed to load PDF renderer."));
+          document.head.appendChild(script);
+        });
+        const pdfjsLib = (window as any).pdfjsLib;
+        if (!pdfjsLib) {
+          throw new Error("PDF renderer is unavailable.");
+        }
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        return pdfjsLib;
+      };
+
+      const renderPdfPagesAsImages = async (dataUrl: string): Promise<string[]> => {
+        const pdfjsLib = await getPdfJsLib();
+        const data = await (await fetch(dataUrl)).arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+        const pages: string[] = [];
+        const maxPages = Math.min(pdfDoc.numPages, 30);
+        for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+          const page = await pdfDoc.getPage(pageNo);
+          const viewport = page.getViewport({ scale: 1.5 });
+          const canvas = document.createElement("canvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) continue;
+          await page.render({ canvasContext: ctx as any, viewport } as any).promise;
+          pages.push(canvas.toDataURL("image/jpeg", 0.9));
+        }
+        return pages;
+      };
+
+      const addAttachmentImagePage = (imageDataUrl: string, label: string) => {
+        pdf.addPage();
+        currentPage++;
+        addHeaderFooterStamp(currentPage);
+        currentY = headerHeight + 10;
+
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(10);
+        pdf.setTextColor(30, 58, 95);
+        const labelLines = pdf.splitTextToSize(label, contentWidth);
+        labelLines.forEach((line: string) => {
+          pdf.text(line, margin, currentY);
+          currentY += 5;
+        });
+        currentY += 1;
+
+        const imgProps = pdf.getImageProperties(imageDataUrl);
+        const availableWidth = contentWidth;
+        const availableHeight = pageHeight - footerHeight - currentY - 8;
+        const widthRatio = availableWidth / imgProps.width;
+        const heightRatio = availableHeight / imgProps.height;
+        const ratio = Math.min(widthRatio, heightRatio);
+        const drawW = imgProps.width * ratio;
+        const drawH = imgProps.height * ratio;
+        const drawX = margin + (availableWidth - drawW) / 2;
+
+        const imgFormat = imageDataUrl.startsWith("data:image/png") ? "PNG" : "JPEG";
+        pdf.addImage(imageDataUrl, imgFormat, drawX, currentY, drawW, drawH);
+      };
       addHeaderFooterStamp(1);
       
       pdf.setFontSize(10);
@@ -1336,7 +1708,7 @@ export default function QuotationPage() {
       pdf.text(quotationData.proposalTitle || 'Techno-Commercial Offer', pageWidth / 2, currentY, { align: 'center' });
       currentY += 15;
       
-      pdf.setFontSize(11);
+      pdf.setFontSize(12);
       pdf.setTextColor(0, 0, 0);
       pdf.setFont('helvetica', 'bold');
       pdf.text(quotationData.toLabel || 'To', margin, currentY);
@@ -1345,7 +1717,7 @@ export default function QuotationPage() {
       pdf.text(`${quotationData.msLabel || 'M/s'} ${client?.name || '-'}`, margin, currentY);
       currentY += 6;
 
-      pdf.setFontSize(14);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
       pdf.text(`${client?.location || ''}`, margin, currentY);
       currentY += 12;
@@ -1518,12 +1890,22 @@ export default function QuotationPage() {
             const formattedCommercialTotal = commercialTotalAmount.toLocaleString('en-IN');
             pdf.text(`Total Amount: ${formattedCommercialTotal}.`, totalBlockX + 3, currentY + 2);
             currentY += totalBlockHeight + 2;
-
-            addTitle('Payment Terms:', 11, '#333333');
-            contentSections.paymentTerms.forEach((term, termIdx) => {
-              addText(`${termIdx + 1}. ${term}`, 9, 5);
+            break;
+          case "paymentTerms":
+            checkNewPage(50);
+            addTitle(blockTitle, 14, '#1e3a5f');
+            normalizePaymentTermSections(contentSections.paymentTermSections, contentSections.paymentTerms).forEach((section) => {
+              checkNewPage(8);
+              pdf.setFont('helvetica', 'bold');
+              pdf.setFontSize(10);
+              pdf.setTextColor(0, 0, 0);
+              pdf.text(section.heading, margin, currentY);
+              currentY += 5;
+              section.terms.forEach((term, termIdx) => {
+                addText(`${termIdx + 1}. ${term}`, 9, 5);
+              });
+              currentY += 2;
             });
-
             addTitle('BANK DETAILS', 11, '#1e3a5f');
             contentSections.bankDetails.forEach((detail) => {
               addText(`${detail.particular}: ${detail.value}`, 9, 0);
@@ -1568,6 +1950,47 @@ export default function QuotationPage() {
       
       pdf.setTextColor('#da2032');
       pdf.text(contentSections.closingCompanyName || 'Revira Nexgen Structures Pvt. Ltd', margin, currentY);
+
+      const uploadDrawings = ensureDrawingUploads(contentSections.uploadDrawings).filter((item) => item.dataUrl);
+      if (uploadDrawings.length > 0) {
+        indexData.push({ title: "Upload a Drawing", page: currentPage + 1 });
+        for (const upload of uploadDrawings) {
+          if (upload.mimeType === "application/pdf") {
+            try {
+              const pdfPageImages = await renderPdfPagesAsImages(upload.dataUrl);
+              if (pdfPageImages.length === 0) {
+                throw new Error("No pages rendered");
+              }
+              for (let pageIdx = 0; pageIdx < pdfPageImages.length; pageIdx++) {
+                addAttachmentImagePage(pdfPageImages[pageIdx], `${upload.fileName || "Uploaded PDF"} - Page ${pageIdx + 1}`);
+              }
+            } catch (pdfAttachmentError) {
+              pdf.addPage();
+              currentPage++;
+              addHeaderFooterStamp(currentPage);
+              currentY = headerHeight + 10;
+              pdf.setFont("helvetica", "bold");
+              pdf.setFontSize(11);
+              pdf.setTextColor(218, 32, 50);
+              pdf.text("Uploaded PDF could not be rendered", margin, currentY);
+              currentY += 7;
+              pdf.setFont("helvetica", "normal");
+              pdf.setFontSize(10);
+              pdf.setTextColor(0, 0, 0);
+              pdf.text(`File: ${upload.fileName || "Attachment"}`, margin, currentY);
+              currentY += 6;
+              const message = "PDF pages were skipped because the renderer could not be loaded in this browser/session.";
+              pdf.splitTextToSize(message, contentWidth).forEach((line: string) => {
+                pdf.text(line, margin, currentY);
+                currentY += 5;
+              });
+              console.warn("Failed to render PDF attachment:", pdfAttachmentError);
+            }
+          } else if (upload.dataUrl.startsWith("data:image/")) {
+            addAttachmentImagePage(upload.dataUrl, upload.fileName || "Uploaded image");
+          }
+        }
+      }
       
       pdf.setPage(indexPageNum);
       const indexTableY = indexStartY;
@@ -1646,25 +2069,245 @@ export default function QuotationPage() {
       const projectIdStr = String(project?.id || 1).padStart(3, '0');
       
       const filename = `RNS_${dateStr}_${companyShortName}_${templatePrefix}-${projectIdStr}_${quotationData.revision}.pdf`;
-      pdf.save(filename);
-      
-      toast({
-        title: "PDF exported",
-        description: "The quotation has been exported as PDF.",
-      });
+      const dataUri = returnDataUri ? (pdf.output("datauristring", { filename }) as string) : undefined;
+      if (save) {
+        pdf.save(filename);
+      }
+
+      if (!silent) {
+        toast({
+          title: save ? "PDF exported" : "PDF generated",
+          description: save ? "The quotation has been exported as PDF." : "The quotation PDF is ready.",
+        });
+      }
+      return { filename, dataUri };
     } catch (error) {
       console.error("PDF export error:", error);
-      toast({
-        title: "Export failed",
-        description: "Failed to export PDF. Please try again.",
-        variant: "destructive",
-      });
+      if (!silent) {
+        toast({
+          title: "Export failed",
+          description: "Failed to export PDF. Please try again.",
+          variant: "destructive",
+        });
+      }
+      return null;
     } finally {
       setIsExporting(false);
     }
   };
 
-  const SectionHeader = ({ title, number, expanded, onToggle, onAdd, testId }: { title: string; number: string; expanded: boolean; onToggle?: () => void; onAdd?: () => void; testId?: string }) => (
+  const buildShareText = () => {
+    const quoteNo = quotationData.quotationNumber || "-";
+    const revision = quotationData.revision || "-";
+    const clientName = client?.name || "Client";
+    return `Quotation ${quoteNo} (${revision}) for ${clientName} is ready. Please find the exported PDF attached.`;
+  };
+
+  const WHATSAPP_SENDER_NUMBER = "9968422442";
+
+  const openSendEmailDialog = () => {
+    if (!existingQuotation?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save quotation first, then send via email.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEmailForm({
+      to: client?.emailAddress || "",
+      subject: `Quotation ${quotationData.quotationNumber || ""} ${quotationData.revision || ""}`.trim(),
+      message: `${buildShareText()}\n\nProject: ${project?.projectName || "-"}\nClient: ${client?.name || "-"}\nDate: ${new Date().toLocaleDateString("en-GB")}`,
+    });
+    setEmailDialogOpen(true);
+  };
+
+  const submitSendEmail = async () => {
+    if (!existingQuotation?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save quotation first, then send via email.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const emails = emailForm.to
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
+    if (emails.length === 0) {
+      toast({
+        title: "Email required",
+        description: "Please enter at least one recipient email id.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!emailForm.subject.trim()) {
+      toast({
+        title: "Subject required",
+        description: "Please enter email subject.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!emailForm.message.trim()) {
+      toast({
+        title: "Message required",
+        description: "Please enter message body.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSendingEmail(true);
+    const generated = await handleExportPDF({ save: false, silent: true, returnDataUri: true });
+    if (!generated?.dataUri) {
+      setIsSendingEmail(false);
+      toast({
+        title: "PDF failed",
+        description: "Unable to generate quotation PDF for email.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const base64 = generated.dataUri.split(",")[1] || "";
+
+    try {
+      await apiRequest("POST", `/api/quotations/${existingQuotation.id}/send-email`, {
+        to: emails,
+        subject: emailForm.subject.trim(),
+        message: emailForm.message.trim(),
+        fileName: generated.filename,
+        pdfBase64: base64,
+      });
+      toast({
+        title: "Email sent",
+        description: `Quotation emailed to ${emails.join(", ")}.`,
+      });
+      setEmailDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Send failed",
+        description: error?.message || "Failed to send email.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const openSendWhatsAppDialog = () => {
+    if (!existingQuotation?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save quotation first, then send on WhatsApp.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const rawPhone = (client?.mobileNumber || "").replace(/\D/g, "");
+    const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+    setWhatsAppForm({
+      mobile: phone,
+      message: `${buildShareText()}\nProject: ${project?.projectName || "-"}\nClient: ${client?.name || "-"}\nFrom: ${WHATSAPP_SENDER_NUMBER}`,
+    });
+    setWhatsappDialogOpen(true);
+  };
+
+  const submitSendWhatsApp = async () => {
+    const phone = whatsAppForm.mobile.replace(/\D/g, "");
+    if (!phone) {
+      toast({
+        title: "Mobile required",
+        description: "Please enter mobile number.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!whatsAppForm.message.trim()) {
+      toast({
+        title: "Message required",
+        description: "Please enter message body.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    const generated = await handleExportPDF({ save: false, silent: true, returnDataUri: true });
+    if (!generated?.dataUri) {
+      setIsSendingWhatsApp(false);
+      toast({
+        title: "PDF failed",
+        description: "Unable to generate quotation PDF for WhatsApp send.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const base64 = generated.dataUri.split(",")[1] || "";
+
+    try {
+      await apiRequest("POST", `/api/quotations/${existingQuotation?.id}/send-whatsapp`, {
+        to: phone,
+        message: whatsAppForm.message.trim(),
+        fileName: generated.filename,
+        pdfBase64: base64,
+      });
+      toast({
+        title: "WhatsApp sent",
+        description: `Quotation sent to ${phone}.`,
+      });
+      setWhatsappDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Send failed",
+        description: error?.message || "Failed to send WhatsApp message.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
+  };
+
+  const SectionHeader = ({
+    title,
+    number,
+    expanded,
+    onToggle,
+    onAdd,
+    testId,
+    isEditingHeading,
+    onStartEditHeading,
+    onHeadingChange,
+    onHeadingBlur,
+    onMoveUp,
+    onMoveDown,
+    onDuplicate,
+    onDelete,
+    canMoveUp = true,
+    canMoveDown = true,
+  }: {
+    title: string;
+    number: string;
+    expanded: boolean;
+    onToggle?: () => void;
+    onAdd?: () => void;
+    testId?: string;
+    isEditingHeading?: boolean;
+    onStartEditHeading?: () => void;
+    onHeadingChange?: (value: string) => void;
+    onHeadingBlur?: () => void;
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
+    onDuplicate?: () => void;
+    onDelete?: () => void;
+    canMoveUp?: boolean;
+    canMoveDown?: boolean;
+  }) => (
     <div 
       className="flex items-center gap-3 bg-[#d92134] text-white px-4 py-3 rounded-lg cursor-pointer"
       onClick={onToggle}
@@ -1673,7 +2316,34 @@ export default function QuotationPage() {
       <div className="flex items-center justify-center w-8 h-8 bg-white text-[#d92134] rounded font-bold text-sm">
         {number}
       </div>
-      <span className="font-semibold flex-1">{title}</span>
+      {isEditingHeading ? (
+        <Input
+          value={title}
+          onChange={(e) => onHeadingChange?.(e.target.value)}
+          onBlur={onHeadingBlur}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === "Escape") {
+              onHeadingBlur?.();
+            }
+          }}
+          autoFocus
+          className="h-8 flex-1 text-slate-900 bg-white"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span className="font-semibold flex-1">{title}</span>
+      )}
+      {onStartEditHeading && !isEditingHeading && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => { e.stopPropagation(); onStartEditHeading(); }}
+          className="text-white hover:bg-white/20 h-7 w-7"
+          title="Edit heading"
+        >
+          <Edit3 className="h-4 w-4" />
+        </Button>
+      )}
       {onAdd && (
         <Button 
           variant="ghost" 
@@ -1682,6 +2352,52 @@ export default function QuotationPage() {
           className="text-white hover:bg-white/20 h-7"
         >
           <Plus className="h-4 w-4 mr-1" /> Add
+        </Button>
+      )}
+      {onMoveUp && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
+          className="text-white hover:bg-white/20 h-7 w-7"
+          disabled={!canMoveUp}
+          title="Move up"
+        >
+          <ChevronUp className="h-4 w-4" />
+        </Button>
+      )}
+      {onMoveDown && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
+          className="text-white hover:bg-white/20 h-7 w-7"
+          disabled={!canMoveDown}
+          title="Move down"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+      )}
+      {onDuplicate && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+          className="text-white hover:bg-white/20 h-7 w-7"
+          title="Duplicate block"
+        >
+          <Copy className="h-4 w-4" />
+        </Button>
+      )}
+      {onDelete && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="text-white hover:bg-white/20 h-7 w-7"
+          title="Delete block"
+        >
+          <Trash2 className="h-4 w-4" />
         </Button>
       )}
       {expanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -1781,13 +2497,37 @@ export default function QuotationPage() {
             )}
             
             <Button
-              onClick={handleExportPDF}
+              onClick={() => { void handleExportPDF(); }}
               disabled={isExporting}
               className="bg-[#22c55e] hover:bg-[#16a34a] text-white"
               data-testid="button-export-pdf"
             >
               <Download className="w-4 h-4 mr-2" />
               {isExporting ? "Exporting..." : "Export PDF"}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={openSendEmailDialog}
+              disabled={isExporting}
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              data-testid="button-send-email"
+              title="Send quotation by email"
+            >
+              <Mail className="w-4 h-4" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={openSendWhatsAppDialog}
+              disabled={isExporting}
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              data-testid="button-send-whatsapp"
+              title="Send quotation on WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" />
             </Button>
             
             <Button
@@ -1992,75 +2732,6 @@ export default function QuotationPage() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm border-[#eeb7b7]">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-slate-700">Accordion Block Manager</h3>
-                <span className="text-xs text-slate-500">Drag to sort, duplicate, or remove</span>
-              </div>
-              <div className="space-y-2">
-                {accordionBlocks.map((block, index) => (
-                  <div
-                    key={block.id}
-                    draggable
-                    onDragStart={() => setDraggingBlockId(block.id)}
-                    onDragEnd={() => setDraggingBlockId(null)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => handleBlockDrop(block.id)}
-                    className="flex items-center gap-2 p-2 border rounded-md bg-slate-50"
-                  >
-                    <GripVertical className="h-4 w-4 text-slate-400 cursor-move" />
-                    <Input
-                      value={block.heading}
-                      onChange={(e) => updateAccordionBlockHeading(block.id, e.target.value)}
-                      onBlur={() => {
-                        if (!block.heading.trim()) {
-                          updateAccordionBlockHeading(block.id, BLOCK_LABELS[block.type]);
-                        }
-                      }}
-                      className="h-8 flex-1 bg-white"
-                      data-testid={`input-block-heading-${block.id}`}
-                    />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      disabled={index === 0}
-                      onClick={() => moveAccordionBlock(index, index - 1)}
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      disabled={index === accordionBlocks.length - 1}
-                      onClick={() => moveAccordionBlock(index, index + 1)}
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      onClick={() => duplicateAccordionBlock(block.id)}
-                    >
-                      <Copy className="h-4 w-4 text-[#d92134]" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8"
-                      onClick={() => removeAccordionBlock(block.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Block 3: Master Signatory Authority */}
           <Card className="shadow-sm">
             <div className="flex items-center gap-3 px-6 py-4 border-b bg-slate-50">
@@ -2115,6 +2786,7 @@ export default function QuotationPage() {
                   number="01" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <ScopeTable data={contentSections.scopeBriefDetails} section="scopeBriefDetails" onUpdateRow={updateScopeRow} onRemoveRow={removeScopeRow} onAddRow={addScopeRow} />
@@ -2130,6 +2802,7 @@ export default function QuotationPage() {
                   number="02" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <ScopeTable data={contentSections.scopeBasicBuilding} section="scopeBasicBuilding" onUpdateRow={updateScopeRow} onRemoveRow={removeScopeRow} onAddRow={addScopeRow} />
@@ -2145,6 +2818,7 @@ export default function QuotationPage() {
                   number="03" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <ScopeTable data={contentSections.scopeBuildingAdditions} section="scopeBuildingAdditions" onUpdateRow={updateScopeRow} onRemoveRow={removeScopeRow} onAddRow={addScopeRow} />
@@ -2160,6 +2834,7 @@ export default function QuotationPage() {
                   number="04" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <ScopeTable data={contentSections.steelWorkFinish} section="steelWorkFinish" onUpdateRow={updateScopeRow} onRemoveRow={removeScopeRow} onAddRow={addScopeRow} />
@@ -2175,6 +2850,7 @@ export default function QuotationPage() {
                   number="05" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <ScopeTable data={contentSections.designLoads} section="designLoads" onUpdateRow={updateScopeRow} onRemoveRow={removeScopeRow} onAddRow={addScopeRow} />
@@ -2191,6 +2867,7 @@ export default function QuotationPage() {
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
                   onAdd={addApplicableCode}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <Card className="shadow-sm">
@@ -2245,6 +2922,7 @@ export default function QuotationPage() {
                   number="06" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <ScopeTable data={contentSections.materialSpecs} section="materialSpecs" onUpdateRow={updateScopeRow} onRemoveRow={removeScopeRow} onAddRow={addScopeRow} />
@@ -2261,6 +2939,7 @@ export default function QuotationPage() {
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
                   onAdd={addDrawingsDeliveryItem}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <Card className="shadow-sm">
@@ -2316,6 +2995,7 @@ export default function QuotationPage() {
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
                   onAdd={addErectionClientItem}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <Card className="shadow-sm">
@@ -2371,6 +3051,7 @@ export default function QuotationPage() {
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
                   onAdd={addErectionCompanyItem}
+                  {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
                   <Card className="shadow-sm">
@@ -2437,6 +3118,7 @@ export default function QuotationPage() {
                     number={project?.quotationType === "Supply and Fabrication" ? "12" : "01"} 
                     expanded={isBlockExpanded(blockInstance.id)}
                     onToggle={() => toggleBlockExpanded(blockInstance.id)}
+                    {...getBlockHeaderProps(blockInstance)}
                   />
                 </div>
               </AccordionTrigger>
@@ -2540,172 +3222,279 @@ export default function QuotationPage() {
             </div>
 
             {/* Accordion sections inside Commercial Price */}
-            <Accordion type="multiple" defaultValue={["payment-terms", "bank-details"]} className="mt-4">
-              {/* Payment Terms Accordion */}
-              <AccordionItem value="payment-terms" className="border rounded-lg mb-2">
-                <AccordionTrigger className="px-4 py-3 bg-slate-50 hover:bg-slate-100 rounded-t-lg hover:no-underline">
-                  <div className="flex items-center justify-between w-full pr-2">
-                    <span className="font-semibold text-slate-700">Payment Terms</span>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={(e) => { e.stopPropagation(); addPaymentTerm(); }}
-                      className="text-[#da2032] h-7"
-                      data-testid="button-add-payment-term"
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Add
-                    </Button>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="px-4">
-                  <ul className="space-y-2 text-sm">
-                    {contentSections.paymentTerms.map((term, index) => (
-                      <li key={index} className="group flex items-start gap-2">
-                        {editingPaymentTerm === index ? (
-                          <>
-                            <Input
-                              value={term}
-                              onChange={(e) => updatePaymentTerm(index, e.target.value)}
-                              className="flex-1 h-8"
-                              autoFocus
-                              onBlur={() => setEditingPaymentTerm(null)}
-                              onKeyDown={(e) => e.key === 'Enter' && setEditingPaymentTerm(null)}
-                            />
-                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removePaymentTerm(index)}>
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <span className="w-6 text-slate-400">{index + 1}.</span>
-                            <span 
-                              className="cursor-pointer hover:bg-slate-50 flex-1 p-1 rounded"
-                              onClick={() => setEditingPaymentTerm(index)}
-                            >
-                              {term}
-                            </span>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                              onClick={() => setEditingPaymentTerm(index)}
-                            >
-                              <Edit3 className="h-3 w-3 text-slate-400" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removePaymentTerm(index)}>
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                            </Button>
-                          </>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </AccordionContent>
-              </AccordionItem>
-
-              {/* Bank Details Accordion */}
-              <AccordionItem value="bank-details" className="border rounded-lg">
-                <AccordionTrigger className="px-4 py-3 bg-slate-50 hover:bg-slate-100 rounded-t-lg hover:no-underline">
-                  <div className="flex items-center justify-between w-full pr-2">
-                    <span className="font-semibold text-slate-700">Bank Details:</span>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={(e) => { e.stopPropagation(); addBankDetail(); }}
-                      className="text-[#da2032]"
-                      data-testid="button-add-bank-detail"
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Add
-                    </Button>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="px-4">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-2 text-slate-600 font-medium w-1/3">Particulars</th>
-                        <th className="text-left p-2 text-slate-600 font-medium">Value</th>
-                        <th className="text-left p-2 text-slate-600 font-medium w-20">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {contentSections.bankDetails.map((detail, index) => (
-                        <tr key={index} className="border-b">
-                          <td className="p-2">
-                            {editingBankDetail === index ? (
-                              <Input
-                                value={detail.particular}
-                                onChange={(e) => updateBankDetail(index, 'particular', e.target.value)}
-                                className="text-slate-600"
-                                data-testid={`input-bank-particular-${index}`}
-                              />
-                            ) : (
-                              <span 
-                                className="text-slate-600 cursor-pointer hover:text-[#d92134]"
-                                onClick={() => setEditingBankDetail(index)}
-                              >
-                                {detail.particular}:
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editingBankDetail === index ? (
-                              <Input
-                                value={detail.value}
-                                onChange={(e) => updateBankDetail(index, 'value', e.target.value)}
-                                data-testid={`input-bank-value-${index}`}
-                              />
-                            ) : (
-                              <span 
-                                className="cursor-pointer hover:text-[#d92134]"
-                                onClick={() => setEditingBankDetail(index)}
-                              >
-                                {detail.value}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-2">
-                            <div className="flex gap-1">
-                              {editingBankDetail === index ? (
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8"
-                                  onClick={() => setEditingBankDetail(null)}
-                                >
-                                  <Check className="h-4 w-4 text-green-600" />
-                                </Button>
-                              ) : (
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8"
-                                  onClick={() => setEditingBankDetail(index)}
-                                >
-                                  <Edit3 className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-8 w-8"
-                                onClick={() => removeBankDetail(index)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
                 </div>
               </AccordionContent>
             </AccordionItem>
           </Accordion>
+          ))}
+
+          {/* Payment Terms Section - All quotation types */}
+          {getBlockInstances("paymentTerms").map((blockInstance) => (
+            <Accordion
+              key={blockInstance.id}
+              type="single"
+              collapsible
+              value={isBlockExpanded(blockInstance.id) ? `payment-terms-${blockInstance.id}` : ""}
+              onValueChange={(value) => setBlockExpanded(blockInstance.id, value === `payment-terms-${blockInstance.id}`)}
+              style={{ order: getBlockOrder(blockInstance.id) }}
+            >
+              <AccordionItem value={`payment-terms-${blockInstance.id}`} className="border-0">
+                <AccordionTrigger className="p-0 hover:no-underline [&>svg]:hidden text-left">
+                  <div className="w-full text-left">
+                    <SectionHeader
+                      title={blockInstance.heading}
+                      number="PT"
+                      expanded={isBlockExpanded(blockInstance.id)}
+                      onToggle={() => toggleBlockExpanded(blockInstance.id)}
+                      onAdd={addPaymentTermSection}
+                      {...getBlockHeaderProps(blockInstance)}
+                    />
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="p-0 pt-4">
+                  <Card className="shadow-sm">
+                    <CardContent className="p-6 space-y-4">
+                      {normalizePaymentTermSections(contentSections.paymentTermSections, contentSections.paymentTerms).map((section, sectionIndex) => {
+                        const isExpanded = expandedPaymentTermSections[section.id] ?? true;
+                        return (
+                          <div key={section.id} className="rounded-lg border p-4 space-y-3">
+                            <div className="group flex items-center gap-2">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  setExpandedPaymentTermSections((prev) => ({
+                                    ...prev,
+                                    [section.id]: !(prev[section.id] ?? true),
+                                  }))
+                                }
+                                data-testid={`button-toggle-payment-heading-${sectionIndex}`}
+                              >
+                                {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+                              </Button>
+                              {editingPaymentTermHeading === section.id ? (
+                                <>
+                                  <Input
+                                    value={section.heading}
+                                    onChange={(e) => updatePaymentTermSectionHeading(section.id, e.target.value)}
+                                    className="h-8 font-semibold flex-1"
+                                    placeholder="Heading"
+                                    autoFocus
+                                    onBlur={() => setEditingPaymentTermHeading(null)}
+                                    onKeyDown={(e) => e.key === "Enter" && setEditingPaymentTermHeading(null)}
+                                    data-testid={`input-payment-heading-${sectionIndex}`}
+                                  />
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-red-600"
+                                    onClick={() => removePaymentTermSection(section.id)}
+                                    data-testid={`button-remove-payment-heading-${sectionIndex}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <span
+                                    className="cursor-pointer hover:bg-slate-50 flex-1 p-1 rounded font-semibold text-slate-700"
+                                    onClick={() => setEditingPaymentTermHeading(section.id)}
+                                  >
+                                    {section.heading}
+                                  </span>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                    onClick={() => setEditingPaymentTermHeading(section.id)}
+                                  >
+                                    <Edit3 className="h-3 w-3 text-slate-400" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-red-600"
+                                    onClick={() => removePaymentTermSection(section.id)}
+                                    data-testid={`button-remove-payment-heading-${sectionIndex}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+
+                            {isExpanded && (
+                              <>
+                                <ul className="space-y-3 text-sm">
+                                  {section.terms.map((term, termIndex) => (
+                                    <li key={`${section.id}-${termIndex}`} className="flex items-start gap-2 group">
+                                      {editingPaymentTermItem?.sectionId === section.id && editingPaymentTermItem?.termIndex === termIndex ? (
+                                        <>
+                                          <Textarea
+                                            value={term}
+                                            onChange={(e) => updatePaymentTerm(section.id, termIndex, e.target.value)}
+                                            onBlur={() => setEditingPaymentTermItem(null)}
+                                            autoFocus
+                                            className="flex-1 min-h-[60px]"
+                                            data-testid={`input-payment-term-${sectionIndex}-${termIndex}`}
+                                          />
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-8 w-8"
+                                            onClick={() => removePaymentTerm(section.id, termIndex)}
+                                            data-testid={`button-remove-payment-term-${sectionIndex}-${termIndex}`}
+                                          >
+                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                          </Button>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span className="w-6 text-slate-400">{termIndex + 1}.</span>
+                                          <span
+                                            className="cursor-pointer hover:bg-slate-50 flex-1 p-1 rounded text-slate-700"
+                                            onClick={() => setEditingPaymentTermItem({ sectionId: section.id, termIndex })}
+                                          >
+                                            {term}
+                                          </span>
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                            onClick={() => setEditingPaymentTermItem({ sectionId: section.id, termIndex })}
+                                          >
+                                            <Edit3 className="h-3 w-3 text-slate-400" />
+                                          </Button>
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-8 w-8"
+                                            onClick={() => removePaymentTerm(section.id, termIndex)}
+                                            data-testid={`button-remove-payment-term-${sectionIndex}-${termIndex}`}
+                                          >
+                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                          </Button>
+                                        </>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => addPaymentTerm(section.id)}
+                                  className="text-[#da2032]"
+                                  data-testid={`button-add-payment-term-${sectionIndex}`}
+                                >
+                                  <Plus className="h-4 w-4 mr-1" /> Add Term
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <div className="pt-4 border-t">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-slate-700">Bank Details:</h4>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={addBankDetail}
+                            className="text-[#da2032]"
+                            data-testid="button-add-bank-detail"
+                          >
+                            <Plus className="h-4 w-4 mr-1" /> Add
+                          </Button>
+                        </div>
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left p-2 text-slate-600 font-medium w-1/3">Particulars</th>
+                              <th className="text-left p-2 text-slate-600 font-medium">Value</th>
+                              <th className="text-left p-2 text-slate-600 font-medium w-20">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {contentSections.bankDetails.map((detail, index) => (
+                              <tr key={index} className="border-b">
+                                <td className="p-2">
+                                  {editingBankDetail === index ? (
+                                    <Input
+                                      value={detail.particular}
+                                      onChange={(e) => updateBankDetail(index, 'particular', e.target.value)}
+                                      className="text-slate-600"
+                                      data-testid={`input-bank-particular-${index}`}
+                                    />
+                                  ) : (
+                                    <span
+                                      className="text-slate-600 cursor-pointer hover:text-[#d92134]"
+                                      onClick={() => setEditingBankDetail(index)}
+                                    >
+                                      {detail.particular}:
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {editingBankDetail === index ? (
+                                    <Input
+                                      value={detail.value}
+                                      onChange={(e) => updateBankDetail(index, 'value', e.target.value)}
+                                      data-testid={`input-bank-value-${index}`}
+                                    />
+                                  ) : (
+                                    <span
+                                      className="cursor-pointer hover:text-[#d92134]"
+                                      onClick={() => setEditingBankDetail(index)}
+                                    >
+                                      {detail.value}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  <div className="flex gap-1">
+                                    {editingBankDetail === index ? (
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8"
+                                        onClick={() => setEditingBankDetail(null)}
+                                      >
+                                        <Check className="h-4 w-4 text-green-600" />
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-8 w-8"
+                                        onClick={() => setEditingBankDetail(index)}
+                                      >
+                                        <Edit3 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-8 w-8"
+                                      onClick={() => removeBankDetail(index)}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-red-500" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           ))}
 
           {/* Commercial Terms & Conditions Section - Only for Supply and Fabrication */}
@@ -2727,6 +3516,7 @@ export default function QuotationPage() {
                       expanded={isBlockExpanded(blockInstance.id)}
                       onToggle={() => toggleBlockExpanded(blockInstance.id)}
                       onAdd={addCommercialTerm}
+                      {...getBlockHeaderProps(blockInstance)}
                     />
                   </div>
                 </AccordionTrigger>
@@ -2935,6 +3725,55 @@ export default function QuotationPage() {
           </Card>
 
           {/* End of Document */}
+          <Card className="shadow-sm">
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-base font-semibold text-slate-800">Upload a Drawing</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addDrawingUploadField}
+                  data-testid="button-add-drawing-upload-field"
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add uploader field
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500">
+                Upload images or PDF files. These will be appended in exported quotation PDF after End of Documents.
+              </p>
+              <div className="space-y-3">
+                {ensureDrawingUploads(contentSections.uploadDrawings).map((upload, index) => (
+                  <div key={upload.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <Input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => handleDrawingUploadChange(upload.id, e)}
+                        data-testid={`input-drawing-upload-${index}`}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => removeDrawingUploadField(upload.id)}
+                        data-testid={`button-remove-drawing-upload-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {upload.fileName ? (
+                      <p className="text-xs text-slate-600">Selected: {upload.fileName}</p>
+                    ) : (
+                      <p className="text-xs text-slate-400">No file selected</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="text-center py-6 text-sm text-slate-500">
             <p>!! End of Documents !!</p>
           </div>
@@ -3012,6 +3851,109 @@ export default function QuotationPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Send Quotation by Email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-slate-600">Email id</label>
+              <Input
+                value={emailForm.to}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, to: e.target.value }))}
+                placeholder="recipient@example.com"
+                data-testid="input-send-email-to"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Subject for email</label>
+              <Input
+                value={emailForm.subject}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, subject: e.target.value }))}
+                placeholder="Email subject"
+                data-testid="input-send-email-subject"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Body message</label>
+              <Textarea
+                value={emailForm.message}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, message: e.target.value }))}
+                className="min-h-[120px]"
+                data-testid="input-send-email-message"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEmailDialogOpen(false)}
+                disabled={isSendingEmail}
+                data-testid="button-send-email-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={submitSendEmail}
+                disabled={isSendingEmail}
+                data-testid="button-send-email-submit"
+              >
+                {isSendingEmail ? "Sending..." : "Submit"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={whatsappDialogOpen} onOpenChange={setWhatsappDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send Quotation on WhatsApp</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-slate-600">Mobile Number</label>
+              <Input
+                value={whatsAppForm.mobile}
+                onChange={(e) => setWhatsAppForm((prev) => ({ ...prev, mobile: e.target.value }))}
+                placeholder="919876543210"
+                data-testid="input-send-whatsapp-mobile"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Message body</label>
+              <Textarea
+                value={whatsAppForm.message}
+                onChange={(e) => setWhatsAppForm((prev) => ({ ...prev, message: e.target.value }))}
+                className="min-h-[120px]"
+                data-testid="input-send-whatsapp-message"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWhatsappDialogOpen(false)}
+                disabled={isSendingWhatsApp}
+                data-testid="button-send-whatsapp-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={submitSendWhatsApp}
+                disabled={isSendingWhatsApp}
+                data-testid="button-send-whatsapp-submit"
+              >
+                {isSendingWhatsApp ? "Sending..." : "Submit"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

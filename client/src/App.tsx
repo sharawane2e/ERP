@@ -17,6 +17,7 @@ import InvoicePage from "@/pages/invoice";
 import GatePassPage from "@/pages/gate-pass";
 import DeliveryChallanPage from "@/pages/delivery-challan";
 import LedgerPage from "@/pages/ledger";
+import ClientLedgerPage from "@/pages/client-ledger";
 import BrandingPage from "@/pages/branding";
 import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -100,6 +101,9 @@ function Router() {
       {/* Ledger Route */}
       <Route path="/projects/:id/ledger">
         <ProtectedRoute component={LedgerPage} />
+      </Route>
+      <Route path="/clients/:id/ledger">
+        <ProtectedRoute component={ClientLedgerPage} />
       </Route>
 
       {/* Branding Route */}

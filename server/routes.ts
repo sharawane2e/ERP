@@ -5,6 +5,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupAuth, hashPassword } from "./auth";
 import { User } from "@shared/schema";
+import tls from "tls";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -352,6 +353,358 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Duplicate error:", err);
       res.status(500).json({ message: "Failed to duplicate quotation" });
+    }
+  });
+
+  app.post("/api/quotations/:id/send-email", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const input = z.object({
+        to: z.union([z.string().email(), z.array(z.string().email()).min(1)]),
+        subject: z.string().min(1),
+        message: z.string().min(1),
+        fileName: z.string().min(1),
+        pdfBase64: z.string().min(1),
+      }).parse(req.body);
+
+      const smtpHost = process.env.SMTP_HOST;
+      const smtpPort = Number(process.env.SMTP_PORT || 587);
+      const smtpUser = process.env.SMTP_USER;
+      const smtpPass = process.env.SMTP_PASS;
+      const smtpFrom = process.env.SMTP_FROM || smtpUser;
+
+      if (!smtpHost || !smtpUser || !smtpPass || !smtpFrom) {
+        return res.status(500).json({
+          message: "SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM.",
+        });
+      }
+
+      const sendWithBareSmtp = async () => {
+        if (smtpPort !== 465) {
+          throw new Error("Built-in SMTP sender currently supports SSL SMTP on port 465 only.");
+        }
+
+        const recipients = Array.isArray(input.to) ? input.to : [input.to];
+        const socket = tls.connect({
+          host: smtpHost,
+          port: smtpPort,
+          rejectUnauthorized: false,
+        });
+
+        const readResponse = () =>
+          new Promise<string>((resolve, reject) => {
+            const onData = (buf: Buffer) => {
+              const text = buf.toString("utf8");
+              const lines = text.split(/\r?\n/).filter(Boolean);
+              const last = lines[lines.length - 1] || "";
+              const code = Number(last.slice(0, 3));
+              const isMultiline = last.length >= 4 && last[3] === "-";
+              if (Number.isFinite(code) && !isMultiline) {
+                cleanup();
+                if (code >= 400) {
+                  reject(new Error(text.trim()));
+                } else {
+                  resolve(text);
+                }
+              }
+            };
+            const onError = (err: Error) => {
+              cleanup();
+              reject(err);
+            };
+            const cleanup = () => {
+              socket.off("data", onData);
+              socket.off("error", onError);
+            };
+            socket.on("data", onData);
+            socket.on("error", onError);
+          });
+
+        const sendCmd = async (cmd: string) => {
+          socket.write(`${cmd}\r\n`);
+          await readResponse();
+        };
+
+        const base64 = (v: string) => Buffer.from(v, "utf8").toString("base64");
+        const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const wrap76 = (value: string) => value.replace(/(.{1,76})/g, "$1\r\n").trim();
+        const safeText = input.message.replace(/\r?\n/g, "\r\n");
+        const attachmentBase64 = wrap76(input.pdfBase64);
+        const messageData =
+          [
+            `From: ${smtpFrom}`,
+            `To: ${recipients.join(", ")}`,
+            `Subject: ${input.subject}`,
+            "MIME-Version: 1.0",
+            `Content-Type: multipart/mixed; boundary="${boundary}"`,
+            "",
+            `--${boundary}`,
+            'Content-Type: text/plain; charset="utf-8"',
+            "Content-Transfer-Encoding: 7bit",
+            "",
+            safeText,
+            "",
+            `--${boundary}`,
+            `Content-Type: application/pdf; name="${input.fileName}"`,
+            "Content-Transfer-Encoding: base64",
+            `Content-Disposition: attachment; filename="${input.fileName}"`,
+            "",
+            attachmentBase64,
+            "",
+            `--${boundary}--`,
+          ]
+            .join("\r\n")
+            .replace(/\n\./g, "\n..");
+
+        await new Promise<void>((resolve, reject) => {
+          socket.once("secureConnect", () => resolve());
+          socket.once("error", reject);
+        });
+        await readResponse(); // 220
+        await sendCmd("EHLO localhost");
+        await sendCmd("AUTH LOGIN");
+        await sendCmd(base64(smtpUser));
+        await sendCmd(base64(smtpPass));
+        await sendCmd(`MAIL FROM:<${smtpFrom}>`);
+        for (const rcpt of recipients) {
+          await sendCmd(`RCPT TO:<${rcpt}>`);
+        }
+        await sendCmd("DATA");
+        socket.write(`${messageData}\r\n.\r\n`);
+        await readResponse();
+        await sendCmd("QUIT");
+        socket.end();
+      };
+
+      let deliveryInfo: {
+        accepted?: string[];
+        rejected?: string[];
+        response?: string;
+        messageId?: string;
+      } = {};
+
+      try {
+        const moduleName = "nodemailer";
+        const nodemailerModule: any = await import(moduleName);
+        const nodemailer = nodemailerModule?.default || nodemailerModule;
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+        const result = await transporter.sendMail({
+          from: smtpFrom,
+          to: input.to,
+          subject: input.subject,
+          text: input.message,
+          attachments: [
+            {
+              filename: input.fileName,
+              content: Buffer.from(input.pdfBase64, "base64"),
+              contentType: "application/pdf",
+            },
+          ],
+        });
+        deliveryInfo = {
+          accepted: Array.isArray(result.accepted) ? result.accepted : [],
+          rejected: Array.isArray(result.rejected) ? result.rejected : [],
+          response: typeof result.response === "string" ? result.response : undefined,
+          messageId: typeof result.messageId === "string" ? result.messageId : undefined,
+        };
+
+        if (!deliveryInfo.accepted || deliveryInfo.accepted.length === 0) {
+          return res.status(502).json({
+            message: `SMTP did not accept any recipient. ${deliveryInfo.response || ""}`.trim(),
+          });
+        }
+      } catch (mailErr: any) {
+        const isMissingMailer =
+          mailErr?.code === "ERR_MODULE_NOT_FOUND" ||
+          mailErr?.code === "MODULE_NOT_FOUND" ||
+          String(mailErr?.message || "").toLowerCase().includes("nodemailer");
+        if (!isMissingMailer) throw mailErr;
+
+        await sendWithBareSmtp();
+        deliveryInfo = {
+          accepted: Array.isArray(input.to) ? input.to : [input.to],
+        };
+      }
+
+      res.status(200).json({
+        message: "Email queued successfully",
+        accepted: deliveryInfo.accepted || [],
+        rejected: deliveryInfo.rejected || [],
+        smtpResponse: deliveryInfo.response,
+        messageId: deliveryInfo.messageId,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+        });
+      }
+      console.error("Send quotation email error:", err);
+      return res.status(500).json({ message: "Failed to send quotation email" });
+    }
+  });
+
+  app.post("/api/quotations/:id/send-whatsapp", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    try {
+      const input = z
+        .object({
+          to: z.string().min(7),
+          message: z.string().min(1),
+          fileName: z.string().min(1),
+          pdfBase64: z.string().min(1),
+        })
+        .parse(req.body);
+
+      const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+      const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      const apiVersion = process.env.WHATSAPP_API_VERSION || "v20.0";
+
+      if (!accessToken || !phoneNumberId) {
+        return res.status(500).json({
+          message:
+            "WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.",
+        });
+      }
+
+      const recipient = input.to.replace(/\D/g, "");
+      const normalizedRecipient =
+        recipient.length === 10 ? `91${recipient}` : recipient;
+      if (!normalizedRecipient) {
+        return res.status(400).json({ message: "Invalid recipient mobile number." });
+      }
+
+      const baseUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}`;
+      const pdfBuffer = Buffer.from(input.pdfBase64, "base64");
+      const boundary = `----whatsappFormBoundary${Date.now().toString(16)}`;
+      const multipartBody = Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="messaging_product"\r\n\r\nwhatsapp\r\n`,
+          "utf8",
+        ),
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="type"\r\n\r\napplication/pdf\r\n`,
+          "utf8",
+        ),
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${input.fileName.replace(/"/g, "")}"\r\nContent-Type: application/pdf\r\n\r\n`,
+          "utf8",
+        ),
+        pdfBuffer,
+        Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
+      ]);
+
+      const mediaUploadResponse = await fetch(`${baseUrl}/media`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body: multipartBody,
+      });
+
+      const mediaUploadText = await mediaUploadResponse.text();
+      const mediaUploadJson = (() => {
+        try {
+          return JSON.parse(mediaUploadText);
+        } catch {
+          return null;
+        }
+      })();
+
+      if (!mediaUploadResponse.ok || !mediaUploadJson?.id) {
+        return res.status(502).json({
+          message: "Failed to upload PDF for WhatsApp send.",
+          providerResponse: mediaUploadJson || mediaUploadText,
+        });
+      }
+
+      if (input.message.trim()) {
+        const textResponse = await fetch(`${baseUrl}/messages`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: normalizedRecipient,
+            type: "text",
+            text: { body: input.message.trim() },
+          }),
+        });
+
+        if (!textResponse.ok) {
+          const textPayload = await textResponse.text();
+          return res.status(502).json({
+            message: "Failed to send WhatsApp text message.",
+            providerResponse: (() => {
+              try {
+                return JSON.parse(textPayload);
+              } catch {
+                return textPayload;
+              }
+            })(),
+          });
+        }
+      }
+
+      const docResponse = await fetch(`${baseUrl}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: normalizedRecipient,
+          type: "document",
+          document: {
+            id: mediaUploadJson.id,
+            filename: input.fileName,
+            caption: "Quotation PDF",
+          },
+        }),
+      });
+
+      const docText = await docResponse.text();
+      const docPayload = (() => {
+        try {
+          return JSON.parse(docText);
+        } catch {
+          return null;
+        }
+      })();
+
+      if (!docResponse.ok) {
+        return res.status(502).json({
+          message: "Failed to send WhatsApp document.",
+          providerResponse: docPayload || docText,
+        });
+      }
+
+      return res.status(200).json({
+        message: "WhatsApp message sent successfully",
+        to: normalizedRecipient,
+        mediaId: mediaUploadJson.id,
+        providerResponse: docPayload || docText,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+        });
+      }
+      console.error("Send quotation whatsapp error:", err);
+      return res.status(500).json({ message: "Failed to send quotation on WhatsApp" });
     }
   });
 
