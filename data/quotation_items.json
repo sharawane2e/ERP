@@ -1,0 +1,46 @@
+[
+  {
+    "id": 44,
+    "quotationId": 22,
+    "serialNo": 1,
+    "description": "Fabrication of Structural steel hot rolled section on job work-labour basis i.e. Pipe rack str excluding detailing.",
+    "unit": "Rs/MT",
+    "quantity": "600.00",
+    "rate": "7440.00",
+    "amount": "4464000.00",
+    "remarks": ""
+  },
+  {
+    "id": 45,
+    "quotationId": 23,
+    "serialNo": 1,
+    "description": "Fabrication of Structural steel hot rolled section on job work-labour basis i.e. Pipe rack str excluding detailing.",
+    "unit": "Rs/MT",
+    "quantity": "600.00",
+    "rate": "7440.00",
+    "amount": "4464000.00",
+    "remarks": ""
+  },
+  {
+    "id": 46,
+    "quotationId": 24,
+    "serialNo": 1,
+    "description": "Fabrication of Structural steel hot rolled section on job work-labour basis i.e. Pipe rack str excluding detailing.",
+    "unit": "Rs/MT",
+    "quantity": "600.00",
+    "rate": "7440.00",
+    "amount": "4464000.00",
+    "remarks": ""
+  },
+  {
+    "id": 47,
+    "quotationId": 25,
+    "serialNo": 1,
+    "description": "Fabrication of Structural steel hot rolled section on job work-labour basis i.e. Pipe rack str excluding detailing.",
+    "unit": "Rs/MT",
+    "quantity": "600.00",
+    "rate": "7440.00",
+    "amount": "4464000.00",
+    "remarks": ""
+  }
+]

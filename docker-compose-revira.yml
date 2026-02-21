@@ -1,0 +1,37 @@
+version: "3"
+
+services:
+  revira-rest-app:
+    image: revira-rest-api-image
+    stdin_open: true
+    command: node dist/index.cjs
+    env_file:
+      - ".production.env"
+    ports:
+      - "39003:443"
+    networks:
+      - revira-dashboard
+    depends_on:
+      - db-server-revira
+    restart: "unless-stopped"
+
+  db-server-revira:
+    image: postgres:16
+    container_name: revira-db
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: appdb
+    volumes:
+      - revira-db-data:/var/lib/postgresql/data
+    networks:
+      - revira-dashboard
+    restart: "unless-stopped"
+
+networks:
+  revira-dashboard:
+    driver: bridge
+
+volumes:
+  revira-db-data:
+    driver: local

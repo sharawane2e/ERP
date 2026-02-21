@@ -1,0 +1,91 @@
+import { drizzle } from "drizzle-orm/node-postgres";
+// import pg from "pg";
+import { Pool } from "pg";
+// import * as schema from "@shared/schema";
+
+// const { Pool } = pg;
+
+// if (!process.env.DATABASE_URL) {
+//   throw new Error(
+//     "DATABASE_URL must be set. Did you forget to provision a database?",
+//   );
+// }
+
+export const pool = new Pool({ connectionString: "postgresql://appuser:secret@localhost:5432/revira" });
+export const db = drizzle(pool);
+
+export async function ensureCoreTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS delivery_challans (
+      id serial PRIMARY KEY,
+      project_id integer NOT NULL REFERENCES projects(id),
+      delivery_challan_number text NOT NULL,
+      revision text NOT NULL DEFAULT 'R-001',
+      version integer NOT NULL DEFAULT 1,
+      parent_delivery_challan_id integer REFERENCES delivery_challans(id),
+      organisation_name text NOT NULL,
+      registered_address text NOT NULL,
+      consignee_address text NOT NULL,
+      client_gstin text,
+      work_order_no text,
+      dispatch_details text,
+      cgst_rate numeric(5,2) DEFAULT 9,
+      sgst_rate numeric(5,2) DEFAULT 9,
+      igst_rate numeric(5,2) DEFAULT 18,
+      applied_tax_type text DEFAULT 'igst',
+      total_amount numeric(14,2) DEFAULT 0,
+      total_tax numeric(14,2) DEFAULT 0,
+      grand_total numeric(14,2) DEFAULT 0,
+      content_sections text,
+      created_at timestamp DEFAULT now() NOT NULL
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS delivery_challan_items (
+      id serial PRIMARY KEY,
+      delivery_challan_id integer NOT NULL REFERENCES delivery_challans(id),
+      serial_no integer NOT NULL,
+      description text NOT NULL,
+      hsn_code text,
+      quantity numeric(10,3) NOT NULL,
+      unit text DEFAULT 'LS',
+      rate_per_unit numeric(12,2),
+      percentage numeric(5,2),
+      amount numeric(14,2) NOT NULL,
+      remarks text
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS project_ledger_budgets (
+      id serial PRIMARY KEY,
+      project_id integer NOT NULL REFERENCES projects(id),
+      project_value numeric(14,2) NOT NULL DEFAULT 0,
+      updated_at timestamp DEFAULT now() NOT NULL,
+      UNIQUE (project_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS project_ledger_entries (
+      id serial PRIMARY KEY,
+      project_id integer NOT NULL REFERENCES projects(id),
+      entry_date text NOT NULL,
+      entry_type text NOT NULL,
+      category text NOT NULL,
+      description text NOT NULL,
+      amount numeric(14,2) NOT NULL,
+      payment_mode text NOT NULL,
+      remarks text,
+      reference text,
+      received_against text,
+      cheque_number text,
+      bank_name text,
+      cheque_date text,
+      utr_number text,
+      attachment_url text,
+      created_at timestamp DEFAULT now() NOT NULL
+    )
+  `);
+}

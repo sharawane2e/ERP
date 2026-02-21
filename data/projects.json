@@ -1,0 +1,42 @@
+[
+  {
+    "id": 8,
+    "projectName": "SF Test Project",
+    "clientId": 1,
+    "location": "Delhi",
+    "quotationType": "Supply and Fabrication",
+    "createdAt": "2026-02-03T09:08:58.971Z"
+  },
+  {
+    "id": 9,
+    "projectName": "Structural Test Project",
+    "clientId": 1,
+    "location": "Delhi",
+    "quotationType": "Structural Fabrication",
+    "createdAt": "2026-02-03T09:10:25.354Z"
+  },
+  {
+    "id": 10,
+    "projectName": "Job Work Test 2",
+    "clientId": 1,
+    "location": "Delhi",
+    "quotationType": "Job Work",
+    "createdAt": "2026-02-03T09:11:35.473Z"
+  },
+  {
+    "id": 12,
+    "projectName": "Duplicate Test 2",
+    "clientId": 1,
+    "location": "Delhi",
+    "quotationType": "Structural Fabrication",
+    "createdAt": "2026-02-03T09:37:25.923Z"
+  },
+  {
+    "id": 13,
+    "projectName": "PEB Template Test",
+    "clientId": 1,
+    "location": "Mumbai",
+    "quotationType": "Supply and Fabrication",
+    "createdAt": "2026-02-03T09:47:50.287Z"
+  }
+]
