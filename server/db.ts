@@ -89,3 +89,92 @@ export async function ensureCoreTables() {
     )
   `);
 }
+
+export async function normalizeLegacyQuotationText() {
+  const tokenPattern = "DNSPL";
+  const apexPattern = "m\\s*/\\s*s\\s+apex";
+
+  await pool.query(
+    `
+      UPDATE quotations
+      SET
+        subject = regexp_replace(subject, $1, 'RNSPL', 'gi'),
+        payment_terms = CASE
+          WHEN payment_terms IS NULL THEN NULL
+          ELSE regexp_replace(payment_terms, $1, 'RNSPL', 'gi')
+        END,
+        notes = CASE
+          WHEN notes IS NULL THEN NULL
+          ELSE regexp_replace(notes, $1, 'RNSPL', 'gi')
+        END,
+        content_sections = CASE
+          WHEN content_sections IS NULL THEN NULL
+          ELSE regexp_replace(content_sections, $1, 'RNSPL', 'gi')
+        END
+      WHERE
+        subject ~* $1 OR
+        COALESCE(payment_terms, '') ~* $1 OR
+        COALESCE(notes, '') ~* $1 OR
+        COALESCE(content_sections, '') ~* $1
+    `,
+    [tokenPattern],
+  );
+
+  await pool.query(
+    `
+      UPDATE quotation_items
+      SET
+        description = regexp_replace(description, $1, 'RNSPL', 'gi'),
+        remarks = CASE
+          WHEN remarks IS NULL THEN NULL
+          ELSE regexp_replace(remarks, $1, 'RNSPL', 'gi')
+        END
+      WHERE
+        description ~* $1 OR
+        COALESCE(remarks, '') ~* $1
+    `,
+    [tokenPattern],
+  );
+
+  await pool.query(
+    `
+      UPDATE quotations
+      SET
+        subject = regexp_replace(subject, $1, 'your company', 'gi'),
+        payment_terms = CASE
+          WHEN payment_terms IS NULL THEN NULL
+          ELSE regexp_replace(payment_terms, $1, 'your company', 'gi')
+        END,
+        notes = CASE
+          WHEN notes IS NULL THEN NULL
+          ELSE regexp_replace(notes, $1, 'your company', 'gi')
+        END,
+        content_sections = CASE
+          WHEN content_sections IS NULL THEN NULL
+          ELSE regexp_replace(content_sections, $1, 'your company', 'gi')
+        END
+      WHERE
+        subject ~* $1 OR
+        COALESCE(payment_terms, '') ~* $1 OR
+        COALESCE(notes, '') ~* $1 OR
+        COALESCE(content_sections, '') ~* $1
+    `,
+    [apexPattern],
+  );
+
+  await pool.query(
+    `
+      UPDATE quotation_items
+      SET
+        description = regexp_replace(description, $1, 'your company', 'gi'),
+        remarks = CASE
+          WHEN remarks IS NULL THEN NULL
+          ELSE regexp_replace(remarks, $1, 'your company', 'gi')
+        END
+      WHERE
+        description ~* $1 OR
+        COALESCE(remarks, '') ~* $1
+    `,
+    [apexPattern],
+  );
+}

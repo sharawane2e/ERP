@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { ensureCoreTables } from "./db";
+import { ensureCoreTables, normalizeLegacyQuotationText } from "./db";
 import fs from "fs";
 import path from "path";
 
@@ -88,6 +88,7 @@ app.use((req, res, next) => {
 
 (async () => {
   await ensureCoreTables();
+  await normalizeLegacyQuotationText();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
