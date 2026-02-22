@@ -178,16 +178,20 @@ const ScopeTable = memo(function ScopeTable({
         </tbody>
       </table>
       {showAddButton && (
-        <div className="p-3 border-t bg-slate-50 text-center">
+        <div className="p-3 border-t bg-slate-50">
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="sm" 
             onClick={() => onAddRow(section)}
-            className="text-[#d92134]"
+            className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
             data-testid={`button-add-${section}`}
           >
-            <Plus className="h-4 w-4 mr-1" /> Add Ledger Entry
+            <Plus className="h-4 w-4 mr-1" /> Add Row
           </Button>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
         </div>
       )}
     </div>
@@ -323,16 +327,13 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
     'Billing as per BOQ.',
     'No third-party inspection or any inspection charges bear by the Revira Nexgen.',
     'NDT test will be performed at shop only and excluding all machines, testing and consumables.',
-    'Closed workshop area to be provided for work by M/s company with fully equipped light and ventilations.',
     'All Machines, Hydra, EOT cranes, raw materials, consumables, bed material. Skids for fabrication.',
-    'Detailing to be provided by your company',
-    'All shop drawing, BOQ, LOT SUMMARY to be provided by M/s company.',
   ],
   closingParagraphs: [
     { id: 'closing1', type: 'paragraph', content: "We hope you'll find our offer in line with your requirement & place your valued WO on us giving us an opportunity to serve you. However, please feel free to contact us for any sort of additional information that you may feel is required pertaining to this offer. We assure you our best support at all times." },
   ],
   closingThanks: 'Thanking you',
-  closingCompanyName: 'Revira Nexgen Structures Pvt. Ltd',
+  closingCompanyName: 'Revira Nexgen Structures Pvt. Ltd.',
   scopeBriefDetails: [
     { slNo: 1, description: 'Building Nos.', details: '01' },
     { slNo: 2, description: 'Building Description', details: 'PEB Shed' },
@@ -415,7 +416,7 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
   ],
   paymentTermSections: getDefaultPaymentTermSections(),
   commercialTerms: [
-    { slNo: 1, description: 'Payment Terms including taxes', conditions: 'Supply and Erection amount: 1. 20% advance on confirmation of order/PO. 2. 40% after finalisation & submission of GA drawing. 3. 30% before dispatch of material. 4. 5% after Structure Erection. 5. 5% after Building Handing over.' },
+    { slNo: 1, description: 'Payment Terms including taxes', conditions: 'Above mentioned.' },
     { slNo: 2, description: 'Delivery period', conditions: 'Delivery as per mutually agreed from the date of receipt of signed approved drawings and receipt of payment as per agreed terms.' },
     { slNo: 3, description: 'Erection period', conditions: 'Erection Period as per mutually agreed after delivery of complete material.' },
     { slNo: 4, description: 'GST', conditions: 'Extra @ 18% for supply and Erection both.' },
@@ -441,6 +442,26 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
   ],
   uploadDrawings: [createEmptyDrawingUpload()],
 };
+
+const DEFAULT_LINE_ITEMS: LineItem[] = [
+  {
+    serialNo: 1,
+    description:
+      "Fabrication of Structural steel hot rolled section on job work-labour basis i.e. Pipe rack str excluding detailing.",
+    unit: "Rs/MT",
+    quantity: 600,
+    rate: 7440,
+    amount: 4464000,
+    remarks: "",
+  },
+];
+
+type QuotationTypeOption = "Supply and Fabrication" | "Structural Fabrication" | "Job Work";
+const QUOTATION_TYPE_OPTIONS: QuotationTypeOption[] = [
+  "Supply and Fabrication",
+  "Structural Fabrication",
+  "Job Work",
+];
 
 const SUPPLY_ACCORDION_BLOCK_TYPES: AccordionBlockType[] = [
   "scopeBrief",
@@ -531,7 +552,7 @@ export default function QuotationPage() {
   });
 
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { serialNo: 1, description: "Fabrication of Structural steel hot rolled section on job work-labour basis i.e. Pipe rack str excluding detailing.", unit: "Rs/MT", quantity: 600, rate: 7440, amount: 4464000, remarks: "" }
+    ...DEFAULT_LINE_ITEMS,
   ]);
 
   const [contentSections, setContentSections] = useState<QuotationContentSections>(defaultSupplyFabricationContent);
@@ -540,13 +561,12 @@ export default function QuotationPage() {
   const [editingPaymentTermHeading, setEditingPaymentTermHeading] = useState<string | null>(null);
   const [editingPaymentTermItem, setEditingPaymentTermItem] = useState<{ sectionId: string; termIndex: number } | null>(null);
   const [expandedPaymentTermSections, setExpandedPaymentTermSections] = useState<Record<string, boolean>>({});
-  const [editingDrawingsDelivery, setEditingDrawingsDelivery] = useState<number | null>(null);
-  const [editingErectionClient, setEditingErectionClient] = useState<number | null>(null);
-  const [editingErectionCompany, setEditingErectionCompany] = useState<number | null>(null);
-  const [editingApplicableCode, setEditingApplicableCode] = useState<number | null>(null);
   const [editingCommercialTerm, setEditingCommercialTerm] = useState<number | null>(null);
   const [editingBankDetail, setEditingBankDetail] = useState<number | null>(null);
   const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
+  const [newQuotationDialogOpen, setNewQuotationDialogOpen] = useState(false);
+  const [newQuotationType, setNewQuotationType] = useState<QuotationTypeOption>("Supply and Fabrication");
+  const [isCreatingNewQuotation, setIsCreatingNewQuotation] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -919,6 +939,105 @@ export default function QuotationPage() {
     },
   });
 
+  const createNewQuotationFromType = async () => {
+    if (!project || !client) return;
+    setIsCreatingNewQuotation(true);
+    try {
+      await apiRequest("PUT", `/revira/api/projects/${project.id}`, {
+        quotationType: newQuotationType,
+      });
+
+      const isSupply = newQuotationType === "Supply and Fabrication";
+      const prefix =
+        newQuotationType === "Supply and Fabrication"
+          ? "RNS-Peb"
+          : newQuotationType === "Structural Fabrication"
+            ? "RNS-SF"
+            : "RNS-JW";
+      const defaultSubject =
+        newQuotationType === "Supply and Fabrication"
+          ? "Supply & erection of Steel Structures for PEB Shed"
+          : newQuotationType === "Structural Fabrication"
+            ? "Structural Fabrication - Steel Structures"
+            : "Job Work - Steel Structures";
+      const date = new Date();
+      const monthYear = date
+        .toLocaleString("en-US", { month: "short", year: "numeric" })
+        .toUpperCase()
+        .replace(" ", "-");
+
+      const nextQuotationData = {
+        quotationNumber: `RNS/${monthYear}/${client.name}/RNS-${String(project.id).padStart(3, "0")}`,
+        revision: "R-001",
+        enquiryNumber: `${prefix}-RNS-${String(project.id).padStart(3, "0")}`,
+        subject: defaultSubject,
+        contactName: quotationData.contactName,
+        contactMobile: quotationData.contactMobile,
+        contactEmail: quotationData.contactEmail,
+        buildingDescription: quotationData.buildingDescription,
+        buildingArea: quotationData.buildingArea,
+        frameType: quotationData.frameType,
+        length: quotationData.length,
+        width: quotationData.width,
+        clearHeight: quotationData.clearHeight,
+        roofSlope: quotationData.roofSlope,
+        paymentTerms: quotationData.paymentTerms,
+        notes: quotationData.notes,
+        proposalTitle: "Techno-Commercial Offer",
+        toLabel: "To",
+        msLabel: "M/s",
+      };
+
+      const nextContentSections: QuotationContentSections = {
+        ...JSON.parse(JSON.stringify(defaultSupplyFabricationContent)),
+        proposalTitle: nextQuotationData.proposalTitle,
+        toLabel: nextQuotationData.toLabel,
+        msLabel: nextQuotationData.msLabel,
+      };
+      const nextAccordionBlocks = getDefaultAccordionBlocks(isSupply);
+
+      const quotationRes = await apiRequest("POST", "/revira/api/quotations", {
+        projectId: Number(projectId),
+        ...nextQuotationData,
+        contentSections: JSON.stringify({
+          ...nextContentSections,
+          accordionBlocks: nextAccordionBlocks,
+        }),
+      });
+      const createdQuotation = await quotationRes.json();
+
+      for (const item of DEFAULT_LINE_ITEMS) {
+        await apiRequest("POST", `/revira/api/quotations/${createdQuotation.id}/items`, {
+          serialNo: item.serialNo,
+          description: item.description,
+          unit: item.unit,
+          quantity: String(item.quantity),
+          rate: String(item.rate),
+          amount: String(item.amount),
+          remarks: item.remarks,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "quotation", "latest"] });
+      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "quotation-versions"] });
+      setNewQuotationDialogOpen(false);
+      setLocation(`/revira/projects/${projectId}/quotation/${createdQuotation.id}`);
+      toast({
+        title: "New quotation created",
+        description: `${newQuotationType} quotation is ready for edit/export.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Create failed",
+        description: error?.message || "Failed to create new quotation.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingNewQuotation(false);
+    }
+  };
+
   const handleSave = () => {
     if (existingQuotation) {
       updateQuotationMutation.mutate();
@@ -1093,7 +1212,6 @@ export default function QuotationPage() {
       ...prev,
       drawingsDelivery: [...prev.drawingsDelivery, 'New drawings/delivery item...']
     }));
-    setEditingDrawingsDelivery(contentSections.drawingsDelivery.length);
   };
 
   const updateDrawingsDeliveryItem = (index: number, content: string) => {
@@ -1115,7 +1233,6 @@ export default function QuotationPage() {
       ...prev,
       erectionScopeClient: [...prev.erectionScopeClient, 'New client scope item...']
     }));
-    setEditingErectionClient(contentSections.erectionScopeClient.length);
   };
 
   const updateErectionClientItem = (index: number, content: string) => {
@@ -1137,7 +1254,6 @@ export default function QuotationPage() {
       ...prev,
       erectionScopeCompany: [...prev.erectionScopeCompany, 'New company scope item...']
     }));
-    setEditingErectionCompany(contentSections.erectionScopeCompany.length);
   };
 
   const updateErectionCompanyItem = (index: number, content: string) => {
@@ -1159,7 +1275,6 @@ export default function QuotationPage() {
       ...prev,
       applicableCodes: [...prev.applicableCodes, 'New applicable code...']
     }));
-    setEditingApplicableCode(contentSections.applicableCodes.length);
   };
 
   const updateApplicableCode = (index: number, content: string) => {
@@ -1949,7 +2064,7 @@ export default function QuotationPage() {
       currentY += 6;
       
       pdf.setTextColor('#da2032');
-      pdf.text(contentSections.closingCompanyName || 'Revira Nexgen Structures Pvt. Ltd', margin, currentY);
+      pdf.text(contentSections.closingCompanyName || 'Revira Nexgen Structures Pvt. Ltd.', margin, currentY);
 
       const uploadDrawings = ensureDrawingUploads(contentSections.uploadDrawings).filter((item) => item.dataUrl);
       if (uploadDrawings.length > 0) {
@@ -2452,6 +2567,10 @@ export default function QuotationPage() {
           
           <Button
             className="bg-[#d92134] hover:bg-[#b51c2c]"
+            onClick={() => {
+              setNewQuotationType((project?.quotationType as QuotationTypeOption) || "Supply and Fabrication");
+              setNewQuotationDialogOpen(true);
+            }}
             data-testid="button-new-quotation"
           >
             <FileText className="w-4 h-4 mr-2" />
@@ -2460,116 +2579,123 @@ export default function QuotationPage() {
         </div>
 
         {/* Action Bar */}
-        <div className="bg-[#d92134] rounded-xl p-4 mb-6 flex items-center justify-between">
-          <div 
-            className="flex items-center gap-3 cursor-pointer hover:opacity-90"
-            onClick={() => setVersionsDialogOpen(true)}
-            data-testid="button-versions-count"
-          >
-            <span className="text-white font-medium">Versions</span>
-            <div className="flex items-center justify-center px-3 h-8 bg-white text-[#d92134] rounded font-bold">
-              {existingQuotation?.revision || quotationData.revision || 'R-001'}
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="icon" 
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+        <div className="bg-[#d92134] rounded-2xl p-3 md:p-4 mb-6 border border-[#c31d2f] shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div
+              className="inline-flex items-center gap-3 cursor-pointer hover:opacity-90 bg-white/10 px-3 py-2 rounded-xl w-fit"
               onClick={() => setVersionsDialogOpen(true)}
-              data-testid="button-view-versions"
+              data-testid="button-versions-count"
             >
-              <Eye className="h-4 w-4" />
-            </Button>
-            
-            {existingQuotation && (
+              <span className="text-white font-semibold">Versions</span>
+              <div className="flex items-center justify-center px-3 h-8 bg-white text-[#d92134] rounded-lg font-bold shadow-sm">
+                {existingQuotation?.revision || quotationData.revision || "R-001"}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 md:justify-end">
+              <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded-xl p-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="bg-transparent border-white/30 text-white hover:bg-white/20"
+                  onClick={() => setVersionsDialogOpen(true)}
+                  data-testid="button-view-versions"
+                  title="View versions"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+
+                {existingQuotation && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => duplicateQuotationMutation.mutate()}
+                    disabled={duplicateQuotationMutation.isPending}
+                    className="bg-transparent border-white/30 text-white hover:bg-white/20"
+                    data-testid="button-duplicate"
+                    title="Duplicate quotation"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={openSendEmailDialog}
+                  disabled={isExporting}
+                  className="bg-transparent border-white/30 text-white hover:bg-white/20"
+                  data-testid="button-send-email"
+                  title="Send quotation by email"
+                >
+                  <Mail className="w-4 h-4" />
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={openSendWhatsAppDialog}
+                  disabled={isExporting}
+                  className="bg-transparent border-white/30 text-white hover:bg-white/20"
+                  data-testid="button-send-whatsapp"
+                  title="Send quotation on WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                </Button>
+              </div>
+
+              <Button
+                onClick={() => {
+                  void handleExportPDF();
+                }}
+                disabled={isExporting}
+                className="bg-[#22c55e] hover:bg-[#16a34a] text-white min-w-[150px]"
+                data-testid="button-export-pdf"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {isExporting ? "Exporting..." : "Export PDF"}
+              </Button>
+
               <Button
                 variant="outline"
-                size="icon"
-                onClick={() => duplicateQuotationMutation.mutate()}
-                disabled={duplicateQuotationMutation.isPending}
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                data-testid="button-duplicate"
+                onClick={handleSave}
+                disabled={createQuotationMutation.isPending || updateQuotationMutation.isPending}
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 min-w-[170px]"
+                data-testid="button-save-quotation"
               >
-                <Copy className="w-4 h-4" />
+                <Save className="w-4 h-4 mr-2" />
+                {createQuotationMutation.isPending || updateQuotationMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
-            )}
-            
-            <Button
-              onClick={() => { void handleExportPDF(); }}
-              disabled={isExporting}
-              className="bg-[#22c55e] hover:bg-[#16a34a] text-white"
-              data-testid="button-export-pdf"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {isExporting ? "Exporting..." : "Export PDF"}
-            </Button>
 
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={openSendEmailDialog}
-              disabled={isExporting}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              data-testid="button-send-email"
-              title="Send quotation by email"
-            >
-              <Mail className="w-4 h-4" />
-            </Button>
-
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={openSendWhatsAppDialog}
-              disabled={isExporting}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              data-testid="button-send-whatsapp"
-              title="Send quotation on WhatsApp"
-            >
-              <MessageCircle className="w-4 h-4" />
-            </Button>
-            
-            <Button
-              variant="outline"
-              onClick={handleSave}
-              disabled={createQuotationMutation.isPending || updateQuotationMutation.isPending}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              data-testid="button-save-quotation"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              {createQuotationMutation.isPending || updateQuotationMutation.isPending 
-                ? "Saving..." 
-                : "Save Changes"}
-            </Button>
-            
-            {existingQuotation && quotationVersions && quotationVersions.length > 1 && (
-              <Button 
-                variant="outline" 
-                size="icon" 
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-red-200"
-                onClick={async () => {
-                  if (confirm(`Are you sure you want to delete this quotation (${existingQuotation.revision})?`)) {
-                    try {
-                      await apiRequest("DELETE", `/revira/api/quotations/${existingQuotation.id}`);
-                      queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "quotation-versions"] });
-                      const remaining = quotationVersions.filter(q => q.id !== existingQuotation.id);
-                      if (remaining.length > 0) {
-                        setLocation(`/revira/projects/${projectId}/quotation/${remaining[0].id}`);
-                      } else {
-                        setLocation(`/revira/projects/${projectId}/quotation`);
+              {existingQuotation && quotationVersions && quotationVersions.length > 1 && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-red-200"
+                  onClick={async () => {
+                    if (confirm(`Are you sure you want to delete this quotation (${existingQuotation.revision})?`)) {
+                      try {
+                        await apiRequest("DELETE", `/revira/api/quotations/${existingQuotation.id}`);
+                        queryClient.invalidateQueries({ queryKey: ["/revira/api/projects", projectId, "quotation-versions"] });
+                        const remaining = quotationVersions.filter((q) => q.id !== existingQuotation.id);
+                        if (remaining.length > 0) {
+                          setLocation(`/revira/projects/${projectId}/quotation/${remaining[0].id}`);
+                        } else {
+                          setLocation(`/revira/projects/${projectId}/quotation`);
+                        }
+                        toast({ title: "Quotation deleted", description: `${existingQuotation.revision} has been deleted.` });
+                      } catch (error) {
+                        toast({ title: "Error", description: "Failed to delete quotation.", variant: "destructive" });
                       }
-                      toast({ title: "Quotation deleted", description: `${existingQuotation.revision} has been deleted.` });
-                    } catch (error) {
-                      toast({ title: "Error", description: "Failed to delete quotation.", variant: "destructive" });
                     }
-                  }
-                }}
-                data-testid="button-delete-quotation"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
+                  }}
+                  data-testid="button-delete-quotation"
+                  title="Delete quotation"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -2858,7 +2984,7 @@ export default function QuotationPage() {
               </div>
               ))}
 
-              {/* Block 8.5: Applicable Codes for Design */}
+                            {/* Block 8.5: Applicable Codes for Design */}
               {getBlockInstances("applicableCodes").map((blockInstance) => (
               <div key={blockInstance.id} className="space-y-4" style={{ order: getBlockOrder(blockInstance.id) }}>
                 <SectionHeader 
@@ -2866,50 +2992,62 @@ export default function QuotationPage() {
                   number="" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                  onAdd={addApplicableCode}
                   {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
-                  <Card className="shadow-sm">
-                    <CardContent className="p-6">
-                      <ul className="space-y-3 text-sm">
+                  <div className="bg-white rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b">
+                          <th className="text-left p-3 w-16 text-slate-600 font-medium">Sr. No.</th>
+                          <th className="text-left p-3 text-slate-600 font-medium">Applicable Code</th>
+                          <th className="w-12 p-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
                         {contentSections.applicableCodes.map((code, index) => (
-                          <li key={index} className="flex items-start gap-3 group">
-                            {editingApplicableCode === index ? (
-                              <>
-                                <Textarea
-                                  value={code}
-                                  onChange={(e) => updateApplicableCode(index, e.target.value)}
-                                  onBlur={() => setEditingApplicableCode(null)}
-                                  autoFocus
-                                  className="flex-1 min-h-[60px]"
-                                />
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeApplicableCode(index)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-[#d92134] font-bold mt-0.5">•</span>
-                                <span className="text-slate-700 flex-1">{code}</span>
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => setEditingApplicableCode(index)}
-                                >
-                                  <Edit3 className="h-4 w-4" />
-                                </Button>
-                                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeApplicableCode(index)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            )}
-                          </li>
+                          <tr key={`applicable-code-${index}`} className="border-b hover:bg-slate-50">
+                            <td className="p-3 text-center text-slate-600">{index + 1}</td>
+                            <td className="p-3">
+                              <Textarea
+                                value={code}
+                                onChange={(e) => updateApplicableCode(index, e.target.value)}
+                                className="min-h-[56px] text-sm border-0 bg-transparent focus:bg-white"
+                                data-testid={`input-applicable-code-${index}`}
+                              />
+                            </td>
+                            <td className="p-3">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeApplicableCode(index)}
+                                disabled={contentSections.applicableCodes.length === 1}
+                                className="h-8 w-8 text-red-500 hover:text-red-700"
+                                data-testid={`button-remove-applicable-code-${index}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
                         ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
+                      </tbody>
+                    </table>
+                    <div className="p-3 border-t bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-slate-200" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addApplicableCode}
+                        className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
+                        data-testid="button-add-applicable-code-row"
+                      >
+                        <Plus className="h-4 w-4 mr-1" /> Add Row
+                      </Button>
+                        <div className="h-px flex-1 bg-slate-200" />
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
               ))}
@@ -2930,7 +3068,7 @@ export default function QuotationPage() {
               </div>
               ))}
 
-              {/* Drawings & Delivery Section */}
+                            {/* Drawings & Delivery Section */}
               {getBlockInstances("drawingsDelivery").map((blockInstance) => (
               <div key={blockInstance.id} className="space-y-4" style={{ order: getBlockOrder(blockInstance.id) }}>
                 <SectionHeader 
@@ -2938,55 +3076,66 @@ export default function QuotationPage() {
                   number="09" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                  onAdd={addDrawingsDeliveryItem}
                   {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
-                  <Card className="shadow-sm">
-                    <CardContent className="p-6">
-                      <ul className="space-y-3 text-sm">
+                  <div className="bg-white rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b">
+                          <th className="text-left p-3 w-16 text-slate-600 font-medium">Sr. No.</th>
+                          <th className="text-left p-3 text-slate-600 font-medium">Drawings & Delivery</th>
+                          <th className="w-12 p-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
                         {contentSections.drawingsDelivery.map((item, index) => (
-                          <li key={index} className="flex items-start gap-3 group">
-                            {editingDrawingsDelivery === index ? (
-                              <>
-                                <Textarea
-                                  value={item}
-                                  onChange={(e) => updateDrawingsDeliveryItem(index, e.target.value)}
-                                  onBlur={() => setEditingDrawingsDelivery(null)}
-                                  autoFocus
-                                  className="flex-1 min-h-[60px]"
-                                />
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeDrawingsDeliveryItem(index)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-[#d92134] font-bold mt-0.5">•</span>
-                                <span className="text-slate-700 flex-1">{item}</span>
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => setEditingDrawingsDelivery(index)}
-                                >
-                                  <Edit3 className="h-4 w-4" />
-                                </Button>
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeDrawingsDeliveryItem(index)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            )}
-                          </li>
+                          <tr key={`drawings-delivery-${index}`} className="border-b hover:bg-slate-50">
+                            <td className="p-3 text-center text-slate-600">{index + 1}</td>
+                            <td className="p-3">
+                              <Textarea
+                                value={item}
+                                onChange={(e) => updateDrawingsDeliveryItem(index, e.target.value)}
+                                className="min-h-[56px] text-sm border-0 bg-transparent focus:bg-white"
+                                data-testid={`input-drawings-delivery-${index}`}
+                              />
+                            </td>
+                            <td className="p-3">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeDrawingsDeliveryItem(index)}
+                                disabled={contentSections.drawingsDelivery.length === 1}
+                                className="h-8 w-8 text-red-500 hover:text-red-700"
+                                data-testid={`button-remove-drawings-delivery-${index}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
                         ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
+                      </tbody>
+                    </table>
+                    <div className="p-3 border-t bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-slate-200" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addDrawingsDeliveryItem}
+                        className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
+                        data-testid="button-add-drawings-delivery-row"
+                      >
+                        <Plus className="h-4 w-4 mr-1" /> Add Row
+                      </Button>
+                        <div className="h-px flex-1 bg-slate-200" />
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
               ))}
-
-              {/* Erection Scopes - Scope of Client */}
+                            {/* Erection Scopes - Scope of Client */}
               {getBlockInstances("erectionScopeClient").map((blockInstance) => (
               <div key={blockInstance.id} className="space-y-4" style={{ order: getBlockOrder(blockInstance.id) }}>
                 <SectionHeader 
@@ -2994,55 +3143,66 @@ export default function QuotationPage() {
                   number="10" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                  onAdd={addErectionClientItem}
                   {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
-                  <Card className="shadow-sm">
-                    <CardContent className="p-6">
-                      <ul className="space-y-3 text-sm">
+                  <div className="bg-white rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b">
+                          <th className="text-left p-3 w-16 text-slate-600 font-medium">Sr. No.</th>
+                          <th className="text-left p-3 text-slate-600 font-medium">Scope of Client</th>
+                          <th className="w-12 p-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
                         {contentSections.erectionScopeClient.map((item, index) => (
-                          <li key={index} className="flex items-start gap-3 group">
-                            {editingErectionClient === index ? (
-                              <>
-                                <Textarea
-                                  value={item}
-                                  onChange={(e) => updateErectionClientItem(index, e.target.value)}
-                                  onBlur={() => setEditingErectionClient(null)}
-                                  autoFocus
-                                  className="flex-1 min-h-[60px]"
-                                />
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeErectionClientItem(index)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-[#d92134] font-bold mt-0.5">•</span>
-                                <span className="text-slate-700 flex-1">{item}</span>
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => setEditingErectionClient(index)}
-                                >
-                                  <Edit3 className="h-4 w-4" />
-                                </Button>
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeErectionClientItem(index)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            )}
-                          </li>
+                          <tr key={`erection-client-${index}`} className="border-b hover:bg-slate-50">
+                            <td className="p-3 text-center text-slate-600">{index + 1}</td>
+                            <td className="p-3">
+                              <Textarea
+                                value={item}
+                                onChange={(e) => updateErectionClientItem(index, e.target.value)}
+                                className="min-h-[56px] text-sm border-0 bg-transparent focus:bg-white"
+                                data-testid={`input-erection-client-${index}`}
+                              />
+                            </td>
+                            <td className="p-3">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeErectionClientItem(index)}
+                                disabled={contentSections.erectionScopeClient.length === 1}
+                                className="h-8 w-8 text-red-500 hover:text-red-700"
+                                data-testid={`button-remove-erection-client-${index}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
                         ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
+                      </tbody>
+                    </table>
+                    <div className="p-3 border-t bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-slate-200" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addErectionClientItem}
+                        className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
+                        data-testid="button-add-erection-client-row"
+                      >
+                        <Plus className="h-4 w-4 mr-1" /> Add Row
+                      </Button>
+                        <div className="h-px flex-1 bg-slate-200" />
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
               ))}
-
-              {/* Erection Scopes - Scope of Company */}
+                            {/* Erection Scopes - Scope of Company */}
               {getBlockInstances("erectionScopeCompany").map((blockInstance) => (
               <div key={blockInstance.id} className="space-y-4" style={{ order: getBlockOrder(blockInstance.id) }}>
                 <SectionHeader 
@@ -3050,50 +3210,62 @@ export default function QuotationPage() {
                   number="11" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                  onAdd={addErectionCompanyItem}
                   {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
-                  <Card className="shadow-sm">
-                    <CardContent className="p-6">
-                      <ul className="space-y-3 text-sm">
+                  <div className="bg-white rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b">
+                          <th className="text-left p-3 w-16 text-slate-600 font-medium">Sr. No.</th>
+                          <th className="text-left p-3 text-slate-600 font-medium">Scope of Company</th>
+                          <th className="w-12 p-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
                         {contentSections.erectionScopeCompany.map((item, index) => (
-                          <li key={index} className="flex items-start gap-3 group">
-                            {editingErectionCompany === index ? (
-                              <>
-                                <Textarea
-                                  value={item}
-                                  onChange={(e) => updateErectionCompanyItem(index, e.target.value)}
-                                  onBlur={() => setEditingErectionCompany(null)}
-                                  autoFocus
-                                  className="flex-1 min-h-[60px]"
-                                />
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeErectionCompanyItem(index)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-[#d92134] font-bold mt-0.5">•</span>
-                                <span className="text-slate-700 flex-1">{item}</span>
-                                <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => setEditingErectionCompany(index)}
-                                >
-                                  <Edit3 className="h-4 w-4" />
-                                </Button>
-                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeErectionCompanyItem(index)}>
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </>
-                            )}
-                          </li>
+                          <tr key={`erection-company-${index}`} className="border-b hover:bg-slate-50">
+                            <td className="p-3 text-center text-slate-600">{index + 1}</td>
+                            <td className="p-3">
+                              <Textarea
+                                value={item}
+                                onChange={(e) => updateErectionCompanyItem(index, e.target.value)}
+                                className="min-h-[56px] text-sm border-0 bg-transparent focus:bg-white"
+                                data-testid={`input-erection-company-${index}`}
+                              />
+                            </td>
+                            <td className="p-3">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeErectionCompanyItem(index)}
+                                disabled={contentSections.erectionScopeCompany.length === 1}
+                                className="h-8 w-8 text-red-500 hover:text-red-700"
+                                data-testid={`button-remove-erection-company-${index}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
                         ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
+                      </tbody>
+                    </table>
+                    <div className="p-3 border-t bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-slate-200" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addErectionCompanyItem}
+                        className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
+                        data-testid="button-add-erection-company-row"
+                      >
+                        <Plus className="h-4 w-4 mr-1" /> Add Row
+                      </Button>
+                        <div className="h-px flex-1 bg-slate-200" />
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
               ))}
@@ -3208,16 +3380,20 @@ export default function QuotationPage() {
                   </tr>
                 </tbody>
               </table>
-              <div className="p-3 border-t bg-slate-50 text-center">
+              <div className="p-3 border-t bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-slate-200" />
                 <Button 
-                  variant="ghost" 
+                  variant="outline" 
                   size="sm" 
                   onClick={addLineItem}
-                  className="text-[#d92134]"
+                  className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
                   data-testid="button-add-row"
                 >
                   <Plus className="h-4 w-4 mr-1" /> Add Row
                 </Button>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
               </div>
             </div>
 
@@ -3246,7 +3422,6 @@ export default function QuotationPage() {
                       number="PT"
                       expanded={isBlockExpanded(blockInstance.id)}
                       onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                      onAdd={addPaymentTermSection}
                       {...getBlockHeaderProps(blockInstance)}
                     />
                   </div>
@@ -3397,7 +3572,21 @@ export default function QuotationPage() {
                         );
                       })}
 
-                      <div className="pt-4 border-t">
+                      <div className="pt-2 border-t space-y-3">
+                        <div className="flex items-center gap-3 py-1">
+                          <div className="h-px flex-1 bg-slate-200" />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={addPaymentTermSection}
+                            className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
+                            data-testid="button-add-payment-heading-bottom"
+                          >
+                            <Plus className="h-4 w-4 mr-1" /> Add New Heading
+                          </Button>
+                          <div className="h-px flex-1 bg-slate-200" />
+                        </div>
+
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="font-semibold text-slate-700">Bank Details:</h4>
                           <Button
@@ -3515,7 +3704,6 @@ export default function QuotationPage() {
                       number="08" 
                       expanded={isBlockExpanded(blockInstance.id)}
                       onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                      onAdd={addCommercialTerm}
                       {...getBlockHeaderProps(blockInstance)}
                     />
                   </div>
@@ -3607,6 +3795,21 @@ export default function QuotationPage() {
                           </tbody>
                         </table>
                       </div>
+                      <div className="p-3 border-t bg-slate-50">
+                        <div className="flex items-center gap-3">
+                          <div className="h-px flex-1 bg-slate-200" />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={addCommercialTerm}
+                          className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
+                          data-testid="button-add-commercial-term-row"
+                        >
+                          <Plus className="h-4 w-4 mr-1" /> Add Row
+                        </Button>
+                          <div className="h-px flex-1 bg-slate-200" />
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
                 </AccordionContent>
@@ -3617,19 +3820,10 @@ export default function QuotationPage() {
 
           {/* Notes Section */}
           <Card className="shadow-sm">
-            <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+            <div className="px-6 py-4 border-b bg-slate-50">
               <h3 className="font-semibold text-slate-700">Notes</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={addNote}
-                className="text-[#da2032]"
-                data-testid="button-add-note"
-              >
-                <Plus className="h-4 w-4 mr-1" /> Add
-              </Button>
             </div>
-            <CardContent className="p-6">
+            <CardContent className="p-6 space-y-3">
               <ul className="space-y-2 text-sm">
                 {contentSections.notes.map((note, index) => (
                   <li key={index} className="group flex items-start gap-2">
@@ -3671,6 +3865,19 @@ export default function QuotationPage() {
                   </li>
                 ))}
               </ul>
+              <div className="flex items-center gap-3 pt-2 border-t">
+                <div className="h-px flex-1 bg-slate-200" />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={addNote}
+                  className="rounded-full border-dashed border-[#da2032]/50 text-[#da2032] bg-white hover:bg-red-50 px-4"
+                  data-testid="button-add-note"
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add New Note
+                </Button>
+                <div className="h-px flex-1 bg-slate-200" />
+              </div>
             </CardContent>
           </Card>
 
@@ -3708,7 +3915,7 @@ export default function QuotationPage() {
                   <Input
                     value={contentSections.closingThanks}
                     onChange={(e) => setContentSections(prev => ({ ...prev, closingThanks: e.target.value }))}
-                    className="font-semibold text-slate-700 bg-transparent border-transparent hover:border-slate-200 focus:border-slate-300 w-auto"
+                    className="font-semibold text-slate-700 bg-transparent border-transparent hover:border-slate-200 focus:border-slate-300 w-full"
                     data-testid="input-closing-thanks"
                   />
                 </div>
@@ -3716,7 +3923,7 @@ export default function QuotationPage() {
                   <Input
                     value={contentSections.closingCompanyName}
                     onChange={(e) => setContentSections(prev => ({ ...prev, closingCompanyName: e.target.value }))}
-                    className="font-bold text-[#da2032] bg-transparent border-transparent hover:border-slate-200 focus:border-slate-300 w-auto"
+                    className="font-bold text-[#da2032] bg-transparent border-transparent hover:border-slate-200 focus:border-slate-300 w-full"
                     data-testid="input-closing-company"
                   />
                 </div>
@@ -3855,6 +4062,49 @@ export default function QuotationPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={newQuotationDialogOpen} onOpenChange={setNewQuotationDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Select Quotation Type</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid gap-2">
+              {QUOTATION_TYPE_OPTIONS.map((type) => (
+                <Button
+                  key={type}
+                  type="button"
+                  variant={newQuotationType === type ? "default" : "outline"}
+                  className={`justify-start ${newQuotationType === type ? "bg-[#d92134] hover:bg-[#b51c2c]" : ""}`}
+                  onClick={() => setNewQuotationType(type)}
+                  data-testid={`button-new-quotation-type-${type.replace(/\s+/g, "-").toLowerCase()}`}
+                >
+                  {type}
+                </Button>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isCreatingNewQuotation}
+                onClick={() => setNewQuotationDialogOpen(false)}
+                data-testid="button-new-quotation-cancel"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={isCreatingNewQuotation}
+                onClick={() => { void createNewQuotationFromType(); }}
+                data-testid="button-new-quotation-create"
+              >
+                {isCreatingNewQuotation ? "Creating..." : "Create Quotation"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
@@ -3960,3 +4210,5 @@ export default function QuotationPage() {
     </LayoutShell>
   );
 }
+
+

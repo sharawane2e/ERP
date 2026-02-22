@@ -106,7 +106,7 @@ function Router() {
       <Route path="/revira/projects/:id/ledger">
         <ProtectedRoute component={LedgerPage} />
       </Route>
-      <Route path="/clients/:id/ledger">
+      <Route path="/revira/clients/:id/ledger">
         <ProtectedRoute component={ClientLedgerPage} />
       </Route>
 
