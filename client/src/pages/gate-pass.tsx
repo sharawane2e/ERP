@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, FileText, Download, Trash2, Copy, Eye, Plus, X, MapPin } from "lucide-react";
+import { ArrowLeft, Save, FileText, Download, Trash2, Copy, Eye, Plus, X, MapPin, Mail, MessageCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { LayoutShell } from "@/components/layout-shell";
@@ -71,6 +71,19 @@ export default function GatePassPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [emailForm, setEmailForm] = useState({
+    to: "",
+    subject: "",
+    message: "",
+  });
+  const [whatsAppForm, setWhatsAppForm] = useState({
+    mobile: "",
+    message: "",
+  });
 
   const [gatePassData, setGatePassData] = useState({
     gatePassNumber: "",
@@ -719,7 +732,10 @@ export default function GatePassPage() {
     }, 0);
   };
 
-  const exportToPDF = async () => {
+  const exportToPDF = async (opts?: { save?: boolean; silent?: boolean; returnDataUri?: boolean }) => {
+    const save = opts?.save ?? true;
+    const silent = opts?.silent ?? false;
+    const returnDataUri = opts?.returnDataUri ?? false;
     try {
       const pdf = new jsPDF({
         orientation: "portrait",
@@ -1231,18 +1247,198 @@ export default function GatePassPage() {
       const titlePrefix = "GATE_PASS";
       const fileName = `${titlePrefix}_${dateStr}_${companyShort}_${gatePassData.revision}.pdf`;
 
-      pdf.save(fileName);
-      toast({
-        title: "PDF exported",
-        description: `Gate Pass saved as ${fileName}`,
-      });
+      const dataUri = returnDataUri ? (pdf.output("datauristring", { filename: fileName }) as string) : undefined;
+      if (save) {
+        pdf.save(fileName);
+      }
+      if (!silent) {
+        toast({
+          title: save ? "PDF exported" : "PDF generated",
+          description: save ? `Gate Pass saved as ${fileName}` : "Gate pass PDF is ready.",
+        });
+      }
+      return { fileName, dataUri };
     } catch (error) {
       console.error("PDF export error:", error);
+      if (!silent) {
+        toast({
+          title: "Export failed",
+          description: "Failed to export gate pass PDF. Please try again.",
+          variant: "destructive",
+        });
+      }
+      return null;
+    }
+  };
+
+  const defaultEmailSignature =
+    "-------------\nThanks & Regards\nHareram Sharma\nRevira Nexgen Structures Pvt. Ltd.\nMo. No. 8390491843";
+
+  const openSendEmailDialog = () => {
+    if (!existingGatePass?.id) {
       toast({
-        title: "Export failed",
-        description: "Failed to export gate pass PDF. Please try again.",
+        title: "Save required",
+        description: "Please save gate pass first, then send via email.",
         variant: "destructive",
       });
+      return;
+    }
+    setEmailForm({
+      to: client?.emailAddress || "",
+      subject: `Gate Pass ${gatePassData.gatePassNumber || ""} ${gatePassData.revision || ""}`.trim(),
+      message: `Please find the attached file for details\n\n${defaultEmailSignature}`,
+    });
+    setEmailDialogOpen(true);
+  };
+
+  const submitSendEmail = async () => {
+    if (!existingGatePass?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save gate pass first, then send via email.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const emails = emailForm.to
+      .split(/[,\s;]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    if (emails.length === 0) {
+      toast({
+        title: "Email required",
+        description: "Please enter at least one recipient email id.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!emailForm.subject.trim() || !emailForm.message.trim()) {
+      toast({
+        title: "Fields required",
+        description: "Please enter subject and message body.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsSendingEmail(true);
+    const generated = await exportToPDF({ save: false, silent: true, returnDataUri: true });
+    if (!generated?.dataUri) {
+      setIsSendingEmail(false);
+      toast({
+        title: "PDF failed",
+        description: "Unable to generate gate pass PDF for email.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const base64 = generated.dataUri.split(",")[1] || "";
+      const emailRes = await apiRequest("POST", `/api/gate-passes/${existingGatePass.id}/send-email`, {
+        to: emails,
+        subject: emailForm.subject.trim(),
+        message: emailForm.message.trim(),
+        fileName: generated.fileName,
+        pdfBase64: base64,
+      });
+      const emailPayload = await emailRes.json();
+      const acceptedList = Array.isArray(emailPayload?.accepted) ? emailPayload.accepted : [];
+      const acceptedText = acceptedList.length > 0 ? acceptedList.join(", ") : emails.join(", ");
+      toast({
+        title: "Email queued",
+        description: `SMTP accepted: ${acceptedText}.`,
+      });
+      setEmailDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Send failed",
+        description: error?.message || "Failed to send email.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const openSendWhatsAppDialog = () => {
+    if (!existingGatePass?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save gate pass first, then send on WhatsApp.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const rawPhone = (client?.mobileNumber || "").replace(/\D/g, "");
+    const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+    setWhatsAppForm({
+      mobile: phone,
+      message: `Please find the attached file for details\n\n${defaultEmailSignature}`,
+    });
+    setWhatsappDialogOpen(true);
+  };
+
+  const submitSendWhatsApp = async () => {
+    if (!existingGatePass?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save gate pass first, then send on WhatsApp.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const phones = whatsAppForm.mobile
+      .split(/[,\s;]+/)
+      .map((value) => value.replace(/\D/g, ""))
+      .filter(Boolean);
+    if (phones.length === 0) {
+      toast({
+        title: "Mobile required",
+        description: "Please enter at least one mobile number.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!whatsAppForm.message.trim()) {
+      toast({
+        title: "Message required",
+        description: "Please enter message body.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    const generated = await exportToPDF({ save: false, silent: true, returnDataUri: true });
+    if (!generated?.dataUri) {
+      setIsSendingWhatsApp(false);
+      toast({
+        title: "PDF failed",
+        description: "Unable to generate gate pass PDF for WhatsApp send.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const base64 = generated.dataUri.split(",")[1] || "";
+      await apiRequest("POST", `/api/gate-passes/${existingGatePass.id}/send-whatsapp`, {
+        to: phones,
+        message: whatsAppForm.message.trim(),
+        fileName: generated.fileName,
+        pdfBase64: base64,
+      });
+      toast({
+        title: "WhatsApp sent",
+        description: `Gate pass sent to ${phones.join(", ")}.`,
+      });
+      setWhatsappDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Send failed",
+        description: error?.message || "Failed to send WhatsApp message.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingWhatsApp(false);
     }
   };
 
@@ -1333,6 +1529,28 @@ export default function GatePassPage() {
             >
               <Download className="w-4 h-4 mr-2" />
               Export PDF
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={openSendEmailDialog}
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              data-testid="button-send-email-gate-pass"
+              title="Send gate pass by email"
+            >
+              <Mail className="w-4 h-4" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={openSendWhatsAppDialog}
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              data-testid="button-send-whatsapp-gate-pass"
+              title="Send gate pass on WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" />
             </Button>
             
             <Button
@@ -1711,6 +1929,109 @@ export default function GatePassPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Send Gate Pass by Email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-slate-600">Email id(s)</label>
+              <Input
+                value={emailForm.to}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, to: e.target.value }))}
+                placeholder="sample@domain.com, sample2@domain.com"
+                data-testid="input-send-email-to-gate-pass"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Subject for email</label>
+              <Input
+                value={emailForm.subject}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, subject: e.target.value }))}
+                placeholder="Email subject"
+                data-testid="input-send-email-subject-gate-pass"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Body message</label>
+              <Textarea
+                value={emailForm.message}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, message: e.target.value }))}
+                className="min-h-[120px]"
+                data-testid="input-send-email-message-gate-pass"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEmailDialogOpen(false)}
+                disabled={isSendingEmail}
+                data-testid="button-send-email-cancel-gate-pass"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={submitSendEmail}
+                disabled={isSendingEmail}
+                data-testid="button-send-email-submit-gate-pass"
+              >
+                {isSendingEmail ? "Sending..." : "Submit"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={whatsappDialogOpen} onOpenChange={setWhatsappDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send Gate Pass on WhatsApp</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-slate-600">Mobile Number(s)</label>
+              <Input
+                value={whatsAppForm.mobile}
+                onChange={(e) => setWhatsAppForm((prev) => ({ ...prev, mobile: e.target.value }))}
+                placeholder="919876543210, 918888777666"
+                data-testid="input-send-whatsapp-mobile-gate-pass"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Message body</label>
+              <Textarea
+                value={whatsAppForm.message}
+                onChange={(e) => setWhatsAppForm((prev) => ({ ...prev, message: e.target.value }))}
+                className="min-h-[120px]"
+                data-testid="input-send-whatsapp-message-gate-pass"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWhatsappDialogOpen(false)}
+                disabled={isSendingWhatsApp}
+                data-testid="button-send-whatsapp-cancel-gate-pass"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={submitSendWhatsApp}
+                disabled={isSendingWhatsApp}
+                data-testid="button-send-whatsapp-submit-gate-pass"
+              >
+                {isSendingWhatsApp ? "Sending..." : "Submit"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

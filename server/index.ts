@@ -2,9 +2,35 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import fs from "fs";
+import path from "path";
+
+const loadEnvFile = (fileName: string) => {
+  const filePath = path.resolve(process.cwd(), fileName);
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, "utf8");
+  content.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const idx = trimmed.indexOf("=");
+    if (idx <= 0) return;
+    const key = trimmed.slice(0, idx).trim();
+    if (!key) return;
+    const currentValue = process.env[key];
+    if (currentValue !== undefined && currentValue !== "") return;
+    const raw = trimmed.slice(idx + 1).trim();
+    process.env[key] = raw.replace(/^['"]|['"]$/g, "");
+  });
+};
+
+loadEnvFile(".env");
+if (process.env.NODE_ENV === "production") {
+  loadEnvFile(".production.env");
+}
 
 const app = express();
 const httpServer = createServer(app);
+const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || "20mb";
 
 declare module "http" {
   interface IncomingMessage {
@@ -14,14 +40,14 @@ declare module "http" {
 
 app.use(
   express.json({
-    limit: "20mb",
+    limit: REQUEST_BODY_LIMIT,
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false, limit: "20mb" }));
+app.use(express.urlencoded({ extended: false, limit: REQUEST_BODY_LIMIT }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

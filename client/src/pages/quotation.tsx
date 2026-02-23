@@ -2117,7 +2117,7 @@ export default function QuotationPage() {
     setEmailForm({
       to: client?.emailAddress || "",
       subject: `Quotation ${quotationData.quotationNumber || ""} ${quotationData.revision || ""}`.trim(),
-      message: `${buildShareText()}\n\nProject: ${project?.projectName || "-"}\nClient: ${client?.name || "-"}\nDate: ${new Date().toLocaleDateString("en-GB")}`,
+      message: `Please find the attached file for details\n\n-------------\nThanks & Regards\nHareram Sharma\nRevira Nexgen Structures Pvt. Ltd.\nMo. No. 8390491843`,
     });
     setEmailDialogOpen(true);
   };
@@ -2133,7 +2133,7 @@ export default function QuotationPage() {
     }
 
     const emails = emailForm.to
-      .split(",")
+      .split(/[,\s;]+/)
       .map((e) => e.trim())
       .filter(Boolean);
     if (emails.length === 0) {
@@ -2176,16 +2176,20 @@ export default function QuotationPage() {
     const base64 = generated.dataUri.split(",")[1] || "";
 
     try {
-      await apiRequest("POST", `/api/quotations/${existingQuotation.id}/send-email`, {
+      const emailRes = await apiRequest("POST", `/api/quotations/${existingQuotation.id}/send-email`, {
         to: emails,
         subject: emailForm.subject.trim(),
         message: emailForm.message.trim(),
         fileName: generated.filename,
         pdfBase64: base64,
       });
+      const emailPayload = await emailRes.json();
+      const acceptedList = Array.isArray(emailPayload?.accepted) ? emailPayload.accepted : [];
+      const acceptedText = acceptedList.length > 0 ? acceptedList.join(", ") : emails.join(", ");
+      const messageIdText = emailPayload?.messageId ? ` Message ID: ${emailPayload.messageId}.` : "";
       toast({
-        title: "Email sent",
-        description: `Quotation emailed to ${emails.join(", ")}.`,
+        title: "Email queued",
+        description: `SMTP accepted: ${acceptedText}.${messageIdText} Check inbox/spam on recipient side.`,
       });
       setEmailDialogOpen(false);
     } catch (error: any) {
@@ -2218,11 +2222,14 @@ export default function QuotationPage() {
   };
 
   const submitSendWhatsApp = async () => {
-    const phone = whatsAppForm.mobile.replace(/\D/g, "");
-    if (!phone) {
+    const phones = whatsAppForm.mobile
+      .split(/[,\s;]+/)
+      .map((value) => value.replace(/\D/g, ""))
+      .filter(Boolean);
+    if (phones.length === 0) {
       toast({
         title: "Mobile required",
-        description: "Please enter mobile number.",
+        description: "Please enter at least one mobile number.",
         variant: "destructive",
       });
       return;
@@ -2252,14 +2259,14 @@ export default function QuotationPage() {
 
     try {
       await apiRequest("POST", `/api/quotations/${existingQuotation?.id}/send-whatsapp`, {
-        to: phone,
+        to: phones,
         message: whatsAppForm.message.trim(),
         fileName: generated.filename,
         pdfBase64: base64,
       });
       toast({
         title: "WhatsApp sent",
-        description: `Quotation sent to ${phone}.`,
+        description: `Quotation sent to ${phones.join(", ")}.`,
       });
       setWhatsappDialogOpen(false);
     } catch (error: any) {
@@ -3862,13 +3869,16 @@ export default function QuotationPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-sm text-slate-600">Email id</label>
+              <label className="text-sm text-slate-600">Email id(s)</label>
               <Input
                 value={emailForm.to}
                 onChange={(e) => setEmailForm((prev) => ({ ...prev, to: e.target.value }))}
-                placeholder="recipient@example.com"
+                placeholder="sample@domain.com, sample2@domain.com"
                 data-testid="input-send-email-to"
               />
+              <p className="mt-1 text-xs text-slate-500">
+                You can enter multiple email ids separated by comma. A copy is always sent to reviranexgen@gmail.com.
+              </p>
             </div>
             <div>
               <label className="text-sm text-slate-600">Subject for email</label>
@@ -3918,11 +3928,11 @@ export default function QuotationPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-sm text-slate-600">Mobile Number</label>
+              <label className="text-sm text-slate-600">Mobile Number(s)</label>
               <Input
                 value={whatsAppForm.mobile}
                 onChange={(e) => setWhatsAppForm((prev) => ({ ...prev, mobile: e.target.value }))}
-                placeholder="919876543210"
+                placeholder="919876543210, 918888777666"
                 data-testid="input-send-whatsapp-mobile"
               />
             </div>

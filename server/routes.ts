@@ -6,12 +6,45 @@ import { z } from "zod";
 import { setupAuth, hashPassword } from "./auth";
 import { User } from "@shared/schema";
 import tls from "tls";
+import { promises as fs } from "fs";
+import os from "os";
+import path from "path";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   setupAuth(app);
+
+  const resolveSmtpConfig = () => {
+    const smtpHostRaw = process.env.SMTP_HOST?.trim();
+    const smtpUserRaw = process.env.SMTP_USER?.trim();
+    const smtpFromRaw = process.env.SMTP_FROM?.trim();
+    const gmailUserRaw = process.env.GMAIL_USER?.trim();
+    const gmailAppPasswordRaw = process.env.GMAIL_APP_PASSWORD?.trim();
+
+    const user = smtpUserRaw || gmailUserRaw;
+    const pass = gmailAppPasswordRaw;
+    const host = smtpHostRaw || (user ? "smtp.gmail.com" : undefined);
+    const port = Number(process.env.SMTP_PORT || (host === "smtp.gmail.com" ? 465 : 587));
+    const from = smtpFromRaw || user;
+
+    const missingKeys = [
+      !host ? "SMTP_HOST" : null,
+      !user ? "SMTP_USER or GMAIL_USER" : null,
+      !pass ? "GMAIL_APP_PASSWORD" : null,
+      !from ? "SMTP_FROM" : null,
+    ].filter(Boolean) as string[];
+
+    return {
+      smtpHost: host,
+      smtpPort: port,
+      smtpUser: user,
+      smtpPass: pass,
+      smtpFrom: from,
+      missingKeys,
+    };
+  };
 
   // Client routes
   app.get(api.clients.list.path.replace("/revira",""), async (req, res) => {
@@ -356,26 +389,60 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/quotations/:id/send-email", async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+  const handleSendDocumentEmail = async (
+    req: any,
+    res: any,
+    documentLabel: "quotation" | "invoice" | "gate pass" | "delivery challan"
+  ) => {
     try {
+      const emailSchema = z.string().email();
+      const parseEmailList = (raw: string | string[]) => {
+        const values = (Array.isArray(raw) ? raw : raw.split(/[,\s;]+/))
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const unique = Array.from(new Set(values.map((value) => value.toLowerCase())));
+        if (unique.length === 0) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ["to"],
+              message: "Please provide at least one recipient email address.",
+            },
+          ]);
+        }
+        const invalid = unique.filter((value) => !emailSchema.safeParse(value).success);
+        if (invalid.length > 0) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ["to"],
+              message: `Invalid email address(es): ${invalid.join(", ")}`,
+            },
+          ]);
+        }
+        return unique;
+      };
+
       const input = z.object({
-        to: z.union([z.string().email(), z.array(z.string().email()).min(1)]),
+        to: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
         subject: z.string().min(1),
         message: z.string().min(1),
         fileName: z.string().min(1),
         pdfBase64: z.string().min(1),
       }).parse(req.body);
+      const recipients = parseEmailList(input.to);
+      const copyRecipient = "reviranexgen@gmail.com";
+      const normalizedCopyRecipient = copyRecipient.toLowerCase();
+      const primaryRecipients = recipients.filter((email) => email !== normalizedCopyRecipient);
+      const allDeliveryRecipients = Array.from(new Set([...recipients, normalizedCopyRecipient]));
+      const toRecipients = primaryRecipients.length > 0 ? primaryRecipients : [normalizedCopyRecipient];
+      const bccRecipients = allDeliveryRecipients.filter((email) => !toRecipients.includes(email));
 
-      const smtpHost = process.env.SMTP_HOST;
-      const smtpPort = Number(process.env.SMTP_PORT || 587);
-      const smtpUser = process.env.SMTP_USER;
-      const smtpPass = process.env.SMTP_PASS;
-      const smtpFrom = process.env.SMTP_FROM || smtpUser;
+      const { smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, missingKeys } = resolveSmtpConfig();
 
       if (!smtpHost || !smtpUser || !smtpPass || !smtpFrom) {
         return res.status(500).json({
-          message: "SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM.",
+          message: `SMTP is not configured. Missing: ${missingKeys.join(", ") || "SMTP settings"}.`,
         });
       }
 
@@ -384,7 +451,6 @@ export async function registerRoutes(
           throw new Error("Built-in SMTP sender currently supports SSL SMTP on port 465 only.");
         }
 
-        const recipients = Array.isArray(input.to) ? input.to : [input.to];
         const socket = tls.connect({
           host: smtpHost,
           port: smtpPort,
@@ -433,7 +499,7 @@ export async function registerRoutes(
         const messageData =
           [
             `From: ${smtpFrom}`,
-            `To: ${recipients.join(", ")}`,
+            `To: ${toRecipients.join(", ")}`,
             `Subject: ${input.subject}`,
             "MIME-Version: 1.0",
             `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -466,7 +532,7 @@ export async function registerRoutes(
         await sendCmd(base64(smtpUser));
         await sendCmd(base64(smtpPass));
         await sendCmd(`MAIL FROM:<${smtpFrom}>`);
-        for (const rcpt of recipients) {
+        for (const rcpt of allDeliveryRecipients) {
           await sendCmd(`RCPT TO:<${rcpt}>`);
         }
         await sendCmd("DATA");
@@ -498,7 +564,8 @@ export async function registerRoutes(
         });
         const result = await transporter.sendMail({
           from: smtpFrom,
-          to: input.to,
+          to: toRecipients,
+          bcc: bccRecipients,
           subject: input.subject,
           text: input.message,
           attachments: [
@@ -530,7 +597,7 @@ export async function registerRoutes(
 
         await sendWithBareSmtp();
         deliveryInfo = {
-          accepted: Array.isArray(input.to) ? input.to : [input.to],
+          accepted: allDeliveryRecipients,
         };
       }
 
@@ -547,165 +614,301 @@ export async function registerRoutes(
           message: err.errors[0].message,
         });
       }
-      console.error("Send quotation email error:", err);
-      return res.status(500).json({ message: "Failed to send quotation email" });
+      console.error(`Send ${documentLabel} email error:`, err);
+      const detail =
+        (err as any)?.response ||
+        (err as any)?.message ||
+        (typeof err === "string" ? err : "Unknown SMTP error");
+      return res.status(500).json({ message: `Failed to send ${documentLabel} email`, detail });
     }
+  };
+
+  app.post("/api/quotations/:id/send-email", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentEmail(req, res, "quotation");
   });
 
-  app.post("/api/quotations/:id/send-whatsapp", async (req, res) => {
+  app.post("/api/invoices/:id/send-email", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentEmail(req, res, "invoice");
+  });
+
+  app.post("/api/gate-passes/:id/send-email", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentEmail(req, res, "gate pass");
+  });
+
+  app.post("/api/delivery-challans/:id/send-email", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentEmail(req, res, "delivery challan");
+  });
+
+  app.post("/api/email/test-smtp", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     try {
       const input = z
         .object({
-          to: z.string().min(7),
+          to: z.string().email(),
+          subject: z.string().min(1).default("SMTP diagnostic test"),
+          message: z.string().min(1).default("This is a diagnostic SMTP test email from quotation module."),
+        })
+        .parse(req.body);
+
+      const { smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, missingKeys } = resolveSmtpConfig();
+
+      if (!smtpHost || !smtpUser || !smtpPass || !smtpFrom) {
+        return res.status(500).json({
+          message: `SMTP is not configured. Missing: ${missingKeys.join(", ") || "SMTP settings"}.`,
+        });
+      }
+
+      const moduleName = "nodemailer";
+      const nodemailerModule: any = await import(moduleName);
+      const nodemailer = nodemailerModule?.default || nodemailerModule;
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      });
+
+      await transporter.verify();
+      const result = await transporter.sendMail({
+        from: smtpFrom,
+        to: input.to,
+        subject: input.subject,
+        text: input.message,
+      });
+
+      return res.status(200).json({
+        message: "SMTP test email queued",
+        accepted: Array.isArray(result.accepted) ? result.accepted : [],
+        rejected: Array.isArray(result.rejected) ? result.rejected : [],
+        messageId: typeof result.messageId === "string" ? result.messageId : undefined,
+        smtpResponse: typeof result.response === "string" ? result.response : undefined,
+        envelope: result.envelope,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("SMTP diagnostic test error:", err);
+      return res.status(500).json({ message: "SMTP diagnostic test failed", detail: String((err as any)?.message || err) });
+    }
+  });
+
+  const handleSendDocumentWhatsapp = async (
+    req: any,
+    res: any,
+    documentLabel: "quotation" | "invoice" | "gate pass" | "delivery challan"
+  ) => {
+    try {
+      const normalizeMobiles = (raw: string | string[]) => {
+        const list = (Array.isArray(raw) ? raw : raw.split(/[,\s;]+/))
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const normalized = list.map((value) => {
+          const digits = value.replace(/\D/g, "");
+          return digits.length === 10 ? `91${digits}` : digits;
+        });
+        const unique = Array.from(new Set(normalized));
+        const invalid = unique.filter((value) => value.length < 11 || value.length > 15);
+        if (unique.length === 0) {
+          throw new z.ZodError([
+            { code: z.ZodIssueCode.custom, path: ["to"], message: "Please provide at least one mobile number." },
+          ]);
+        }
+        if (invalid.length > 0) {
+          throw new z.ZodError([
+            { code: z.ZodIssueCode.custom, path: ["to"], message: `Invalid mobile number(s): ${invalid.join(", ")}` },
+          ]);
+        }
+        return unique;
+      };
+
+      const input = z
+        .object({
+          to: z.union([z.string().min(7), z.array(z.string().min(7)).min(1)]),
           message: z.string().min(1),
           fileName: z.string().min(1),
           pdfBase64: z.string().min(1),
         })
         .parse(req.body);
 
-      const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-      const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-      const apiVersion = process.env.WHATSAPP_API_VERSION || "v20.0";
-
-      if (!accessToken || !phoneNumberId) {
-        return res.status(500).json({
-          message:
-            "WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.",
-        });
-      }
-
-      const recipient = input.to.replace(/\D/g, "");
-      const normalizedRecipient =
-        recipient.length === 10 ? `91${recipient}` : recipient;
-      if (!normalizedRecipient) {
-        return res.status(400).json({ message: "Invalid recipient mobile number." });
-      }
-
-      const baseUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}`;
+      const recipients = normalizeMobiles(input.to);
+      const sessionDir = process.env.WHATSAPP_SESSION_DIR || path.resolve(process.cwd(), ".whatsapp-session");
+      const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
+      const headless = String(process.env.WHATSAPP_PUPPETEER_HEADLESS || "false").toLowerCase() === "true";
       const pdfBuffer = Buffer.from(input.pdfBase64, "base64");
-      const boundary = `----whatsappFormBoundary${Date.now().toString(16)}`;
-      const multipartBody = Buffer.concat([
-        Buffer.from(
-          `--${boundary}\r\nContent-Disposition: form-data; name="messaging_product"\r\n\r\nwhatsapp\r\n`,
-          "utf8",
-        ),
-        Buffer.from(
-          `--${boundary}\r\nContent-Disposition: form-data; name="type"\r\n\r\napplication/pdf\r\n`,
-          "utf8",
-        ),
-        Buffer.from(
-          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${input.fileName.replace(/"/g, "")}"\r\nContent-Type: application/pdf\r\n\r\n`,
-          "utf8",
-        ),
-        pdfBuffer,
-        Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
-      ]);
+      const tempFilePath = path.join(os.tmpdir(), `wa_${Date.now()}_${input.fileName.replace(/[^\w.-]/g, "_")}`);
 
-      const mediaUploadResponse = await fetch(`${baseUrl}/media`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
-        },
-        body: multipartBody,
-      });
+      await fs.writeFile(tempFilePath, pdfBuffer);
 
-      const mediaUploadText = await mediaUploadResponse.text();
-      const mediaUploadJson = (() => {
-        try {
-          return JSON.parse(mediaUploadText);
-        } catch {
-          return null;
+      const waitAny = async (page: any, selectors: string[], timeout = 20000) => {
+        const started = Date.now();
+        while (Date.now() - started < timeout) {
+          for (const selector of selectors) {
+            const found = await page.$(selector);
+            if (found) return found;
+          }
+          await new Promise((r) => setTimeout(r, 300));
         }
-      })();
+        return null;
+      };
+      const clickFirstVisible = async (page: any, selectors: string[]) => {
+        for (const selector of selectors) {
+          const clicked = await page.evaluate((sel) => {
+            const nodes = Array.from(document.querySelectorAll(sel)) as HTMLElement[];
+            const target = nodes.find((el) => {
+              const style = window.getComputedStyle(el);
+              const rect = el.getBoundingClientRect();
+              return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+            });
+            if (!target) return false;
+            target.click();
+            return true;
+          }, selector);
+          if (clicked) return true;
+        }
+        return false;
+      };
 
-      if (!mediaUploadResponse.ok || !mediaUploadJson?.id) {
-        return res.status(502).json({
-          message: "Failed to upload PDF for WhatsApp send.",
-          providerResponse: mediaUploadJson || mediaUploadText,
+      let browser: any = null;
+      try {
+        const moduleName = "puppeteer";
+        const puppeteerModule: any = await import(moduleName);
+        const puppeteer = puppeteerModule?.default || puppeteerModule;
+        browser = await puppeteer.launch({
+          headless,
+          userDataDir: sessionDir,
+          executablePath,
+          args: ["--no-sandbox", "--disable-setuid-sandbox"],
         });
-      }
+        const page = await browser.newPage();
+        await page.goto("https://web.whatsapp.com/", { waitUntil: "domcontentloaded", timeout: 120000 });
 
-      if (input.message.trim()) {
-        const textResponse = await fetch(`${baseUrl}/messages`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: normalizedRecipient,
-            type: "text",
-            text: { body: input.message.trim() },
-          }),
+        const loggedIn = await waitAny(
+          page,
+          ['div[data-testid="chat-list-search"]', 'div[role="textbox"][contenteditable="true"]'],
+          25000
+        );
+        if (!loggedIn) {
+          const qrVisible = await waitAny(page, ["canvas"], 2000);
+          if (qrVisible) {
+            throw new Error(
+              "WhatsApp Web login required. Scan QR in the opened browser session and retry. Set WHATSAPP_PUPPETEER_HEADLESS=false for first login."
+            );
+          }
+        }
+
+        const delivered: string[] = [];
+        for (const recipient of recipients) {
+          const targetUrl = `https://web.whatsapp.com/send?phone=${recipient}&text=${encodeURIComponent(input.message.trim())}`;
+          await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 120000 });
+          await waitAny(page, ['div[role="textbox"][contenteditable="true"]'], 20000);
+
+          const attachSelectors = [
+            'button[title="Attach"]',
+            'button[aria-label="Attach"]',
+            'div[title="Attach"]',
+            'span[data-icon="clip"]',
+            'span[data-icon="plus"]',
+            'span[data-icon="plus-rounded"]',
+            'span[data-icon="attach-menu-plus"]',
+          ];
+          let clipHandle = await waitAny(page, attachSelectors, 12000);
+          if (clipHandle) {
+            await clipHandle.click();
+          } else {
+            const clicked = await clickFirstVisible(page, attachSelectors);
+            if (!clicked) {
+              throw new Error(`Unable to locate attach button for ${recipient}.`);
+            }
+          }
+
+          let fileInput = await waitAny(
+            page,
+            [
+              'input[type="file"][accept*="pdf"]',
+              'input[type="file"][accept*="document"]',
+              'input[type="file"]',
+            ],
+            12000
+          );
+          if (!fileInput) {
+            await clickFirstVisible(page, attachSelectors);
+            fileInput = await waitAny(page, ['input[type="file"]'], 10000);
+          }
+          if (!fileInput) {
+            throw new Error(`Unable to open attachment menu for ${recipient}.`);
+          }
+          await fileInput.uploadFile(tempFilePath);
+
+          const sendHandle = await waitAny(page, ['span[data-icon="send"]', 'button[aria-label="Send"]'], 20000);
+          if (!sendHandle) {
+            throw new Error(`Unable to locate send button for ${recipient}.`);
+          }
+          await sendHandle.click();
+          await new Promise((r) => setTimeout(r, 2000));
+          delivered.push(recipient);
+        }
+
+        return res.status(200).json({
+          message: "WhatsApp message queued successfully",
+          sentTo: delivered,
         });
-
-        if (!textResponse.ok) {
-          const textPayload = await textResponse.text();
-          return res.status(502).json({
-            message: "Failed to send WhatsApp text message.",
-            providerResponse: (() => {
-              try {
-                return JSON.parse(textPayload);
-              } catch {
-                return textPayload;
-              }
-            })(),
+      } catch (err: any) {
+        const isMissingPuppeteer =
+          err?.code === "ERR_MODULE_NOT_FOUND" ||
+          err?.code === "MODULE_NOT_FOUND" ||
+          String(err?.message || "").toLowerCase().includes("puppeteer");
+        if (isMissingPuppeteer) {
+          return res.status(500).json({
+            message: "WhatsApp Puppeteer dependency missing. Install 'puppeteer' and restart server.",
           });
         }
-      }
-
-      const docResponse = await fetch(`${baseUrl}/messages`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: normalizedRecipient,
-          type: "document",
-          document: {
-            id: mediaUploadJson.id,
-            filename: input.fileName,
-            caption: "Quotation PDF",
-          },
-        }),
-      });
-
-      const docText = await docResponse.text();
-      const docPayload = (() => {
+        throw err;
+      } finally {
         try {
-          return JSON.parse(docText);
-        } catch {
-          return null;
-        }
-      })();
-
-      if (!docResponse.ok) {
-        return res.status(502).json({
-          message: "Failed to send WhatsApp document.",
-          providerResponse: docPayload || docText,
-        });
+          if (browser) await browser.close();
+        } catch {}
+        try {
+          await fs.unlink(tempFilePath);
+        } catch {}
       }
-
-      return res.status(200).json({
-        message: "WhatsApp message sent successfully",
-        to: normalizedRecipient,
-        mediaId: mediaUploadJson.id,
-        providerResponse: docPayload || docText,
-      });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({
-          message: err.errors[0].message,
-        });
+        return res.status(400).json({ message: err.errors[0].message });
       }
-      console.error("Send quotation whatsapp error:", err);
-      return res.status(500).json({ message: "Failed to send quotation on WhatsApp" });
+      console.error(`Send ${documentLabel} WhatsApp error:`, err);
+      return res.status(500).json({
+        message: `Failed to send ${documentLabel} on WhatsApp`,
+        detail: (err as any)?.message || "Unknown WhatsApp error",
+      });
     }
+  };
+
+  app.post("/api/quotations/:id/send-whatsapp", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentWhatsapp(req, res, "quotation");
+  });
+
+  app.post("/api/invoices/:id/send-whatsapp", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentWhatsapp(req, res, "invoice");
+  });
+
+  app.post("/api/gate-passes/:id/send-whatsapp", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentWhatsapp(req, res, "gate pass");
+  });
+
+  app.post("/api/delivery-challans/:id/send-whatsapp", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentWhatsapp(req, res, "delivery challan");
   });
 
   // Get quotation versions
