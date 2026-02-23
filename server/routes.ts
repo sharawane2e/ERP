@@ -15,7 +15,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupAuth(app);
-  
+
   const resolveSmtpConfig = () => {
     const smtpHostRaw = process.env.SMTP_HOST?.trim();
     const smtpUserRaw = process.env.SMTP_USER?.trim();
@@ -741,7 +741,7 @@ export async function registerRoutes(
       const recipients = normalizeMobiles(input.to);
       const sessionDir = process.env.WHATSAPP_SESSION_DIR || path.resolve(process.cwd(), ".whatsapp-session");
       const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || undefined;
-      const headless = String(process.env.WHATSAPP_PUPPETEER_HEADLESS || "false").toLowerCase() === "true";
+      const headless = String("true").toLowerCase() === "true";
       const pdfBuffer = Buffer.from(input.pdfBase64, "base64");
       const tempFilePath = path.join(os.tmpdir(), `wa_${Date.now()}_${input.fileName.replace(/[^\w.-]/g, "_")}`);
 
