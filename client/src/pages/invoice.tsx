@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, FileText, Download, Trash2, Copy, Eye, Plus, X, MapPin } from "lucide-react";
+import { ArrowLeft, Save, FileText, Download, Trash2, Copy, Eye, Plus, X, MapPin, Mail, MessageCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,6 +53,19 @@ export default function InvoicePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [emailForm, setEmailForm] = useState({
+    to: "",
+    subject: "",
+    message: "",
+  });
+  const [whatsAppForm, setWhatsAppForm] = useState({
+    mobile: "",
+    message: "",
+  });
 
   const [invoiceData, setInvoiceData] = useState({
     invoiceNumber: "",
@@ -590,7 +603,10 @@ export default function InvoicePage() {
     })}`;
   };
 
-  const exportToPDF = async () => {
+  const exportToPDF = async (opts?: { save?: boolean; silent?: boolean; returnDataUri?: boolean }) => {
+    const save = opts?.save ?? true;
+    const silent = opts?.silent ?? false;
+    const returnDataUri = opts?.returnDataUri ?? false;
     try {
       const pdf = new jsPDF({
         orientation: "portrait",
@@ -1071,19 +1087,198 @@ export default function InvoicePage() {
       const companyShort = (branding?.entityName || "RNS").split(" ").map((w) => w[0]).join("");
       const titlePrefix = invoiceTitle === "TAX INVOICE" ? "TAX_INVOICE" : "PROFORMA_INVOICE";
       const fileName = `${titlePrefix}_${dateStr}_${companyShort}_${invoiceData.revision}.pdf`;
-
-      pdf.save(fileName);
-      toast({
-        title: "PDF exported",
-        description: `Invoice saved as ${fileName}`,
-      });
+      const dataUri = returnDataUri ? (pdf.output("datauristring", { filename: fileName }) as string) : undefined;
+      if (save) {
+        pdf.save(fileName);
+      }
+      if (!silent) {
+        toast({
+          title: save ? "PDF exported" : "PDF generated",
+          description: save ? `Invoice saved as ${fileName}` : "Invoice PDF is ready.",
+        });
+      }
+      return { fileName, dataUri };
     } catch (error) {
       console.error("PDF export error:", error);
+      if (!silent) {
+        toast({
+          title: "Export failed",
+          description: "Failed to export invoice PDF. Please try again.",
+          variant: "destructive",
+        });
+      }
+      return null;
+    }
+  };
+
+  const defaultEmailSignature =
+    "-------------\nThanks & Regards\nHareram Sharma\nRevira Nexgen Structures Pvt. Ltd.\nMo. No. 8390491843";
+
+  const openSendEmailDialog = () => {
+    if (!existingInvoice?.id) {
       toast({
-        title: "Export failed",
-        description: "Failed to export invoice PDF. Please try again.",
+        title: "Save required",
+        description: "Please save invoice first, then send via email.",
         variant: "destructive",
       });
+      return;
+    }
+    setEmailForm({
+      to: client?.emailAddress || "",
+      subject: `Invoice ${invoiceData.invoiceNumber || ""} ${invoiceData.revision || ""}`.trim(),
+      message: `Please find the attached file for details\n\n${defaultEmailSignature}`,
+    });
+    setEmailDialogOpen(true);
+  };
+
+  const submitSendEmail = async () => {
+    if (!existingInvoice?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save invoice first, then send via email.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const emails = emailForm.to
+      .split(/[,\s;]+/)
+      .map((e) => e.trim())
+      .filter(Boolean);
+    if (emails.length === 0) {
+      toast({
+        title: "Email required",
+        description: "Please enter at least one recipient email id.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!emailForm.subject.trim() || !emailForm.message.trim()) {
+      toast({
+        title: "Fields required",
+        description: "Please enter subject and message body.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsSendingEmail(true);
+    const generated = await exportToPDF({ save: false, silent: true, returnDataUri: true });
+    if (!generated?.dataUri) {
+      setIsSendingEmail(false);
+      toast({
+        title: "PDF failed",
+        description: "Unable to generate invoice PDF for email.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const base64 = generated.dataUri.split(",")[1] || "";
+      const emailRes = await apiRequest("POST", `/revira/api/invoices/${existingInvoice.id}/send-email`, {
+        to: emails,
+        subject: emailForm.subject.trim(),
+        message: emailForm.message.trim(),
+        fileName: generated.fileName,
+        pdfBase64: base64,
+      });
+      const emailPayload = await emailRes.json();
+      const acceptedList = Array.isArray(emailPayload?.accepted) ? emailPayload.accepted : [];
+      const acceptedText = acceptedList.length > 0 ? acceptedList.join(", ") : emails.join(", ");
+      toast({
+        title: "Email queued",
+        description: `SMTP accepted: ${acceptedText}.`,
+      });
+      setEmailDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Send failed",
+        description: error?.message || "Failed to send email.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const openSendWhatsAppDialog = () => {
+    if (!existingInvoice?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save invoice first, then send on WhatsApp.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const rawPhone = (client?.mobileNumber || "").replace(/\D/g, "");
+    const phone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+    setWhatsAppForm({
+      mobile: phone,
+      message: `Please find the attached file for details\n\n${defaultEmailSignature}`,
+    });
+    setWhatsappDialogOpen(true);
+  };
+
+  const submitSendWhatsApp = async () => {
+    if (!existingInvoice?.id) {
+      toast({
+        title: "Save required",
+        description: "Please save invoice first, then send on WhatsApp.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const phones = whatsAppForm.mobile
+      .split(/[,\s;]+/)
+      .map((value) => value.replace(/\D/g, ""))
+      .filter(Boolean);
+    if (phones.length === 0) {
+      toast({
+        title: "Mobile required",
+        description: "Please enter at least one mobile number.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!whatsAppForm.message.trim()) {
+      toast({
+        title: "Message required",
+        description: "Please enter message body.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    const generated = await exportToPDF({ save: false, silent: true, returnDataUri: true });
+    if (!generated?.dataUri) {
+      setIsSendingWhatsApp(false);
+      toast({
+        title: "PDF failed",
+        description: "Unable to generate invoice PDF for WhatsApp send.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const base64 = generated.dataUri.split(",")[1] || "";
+      await apiRequest("POST", `/revira/api/invoices/${existingInvoice.id}/send-whatsapp`, {
+        to: phones,
+        message: whatsAppForm.message.trim(),
+        fileName: generated.fileName,
+        pdfBase64: base64,
+      });
+      toast({
+        title: "WhatsApp sent",
+        description: `Invoice sent to ${phones.join(", ")}.`,
+      });
+      setWhatsappDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Send failed",
+        description: error?.message || "Failed to send WhatsApp message.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingWhatsApp(false);
     }
   };
 
@@ -1173,6 +1368,28 @@ export default function InvoicePage() {
             >
               <Download className="w-4 h-4 mr-2" />
               Export PDF
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={openSendEmailDialog}
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              data-testid="button-send-email-invoice"
+              title="Send invoice by email"
+            >
+              <Mail className="w-4 h-4" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={openSendWhatsAppDialog}
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+              data-testid="button-send-whatsapp-invoice"
+              title="Send invoice on WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" />
             </Button>
             
             <Button
@@ -1677,6 +1894,109 @@ export default function InvoicePage() {
                 </div>
               </div>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Send Invoice by Email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-slate-600">Email id(s)</label>
+              <Input
+                value={emailForm.to}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, to: e.target.value }))}
+                placeholder="sample@domain.com, sample2@domain.com"
+                data-testid="input-send-email-to-invoice"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Subject for email</label>
+              <Input
+                value={emailForm.subject}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, subject: e.target.value }))}
+                placeholder="Email subject"
+                data-testid="input-send-email-subject-invoice"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Body message</label>
+              <Textarea
+                value={emailForm.message}
+                onChange={(e) => setEmailForm((prev) => ({ ...prev, message: e.target.value }))}
+                className="min-h-[120px]"
+                data-testid="input-send-email-message-invoice"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEmailDialogOpen(false)}
+                disabled={isSendingEmail}
+                data-testid="button-send-email-cancel-invoice"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={submitSendEmail}
+                disabled={isSendingEmail}
+                data-testid="button-send-email-submit-invoice"
+              >
+                {isSendingEmail ? "Sending..." : "Submit"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={whatsappDialogOpen} onOpenChange={setWhatsappDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send Invoice on WhatsApp</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-slate-600">Mobile Number(s)</label>
+              <Input
+                value={whatsAppForm.mobile}
+                onChange={(e) => setWhatsAppForm((prev) => ({ ...prev, mobile: e.target.value }))}
+                placeholder="919876543210, 918888777666"
+                data-testid="input-send-whatsapp-mobile-invoice"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-600">Message body</label>
+              <Textarea
+                value={whatsAppForm.message}
+                onChange={(e) => setWhatsAppForm((prev) => ({ ...prev, message: e.target.value }))}
+                className="min-h-[120px]"
+                data-testid="input-send-whatsapp-message-invoice"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWhatsappDialogOpen(false)}
+                disabled={isSendingWhatsApp}
+                data-testid="button-send-whatsapp-cancel-invoice"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={submitSendWhatsApp}
+                disabled={isSendingWhatsApp}
+                data-testid="button-send-whatsapp-submit-invoice"
+              >
+                {isSendingWhatsApp ? "Sending..." : "Submit"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
