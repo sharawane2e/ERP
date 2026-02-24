@@ -30,7 +30,7 @@ if (process.env.NODE_ENV === "production") {
 
 const app = express();
 const httpServer = createServer(app);
-const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || "40mb";
+const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT || "60mb";
 
 declare module "http" {
   interface IncomingMessage {
