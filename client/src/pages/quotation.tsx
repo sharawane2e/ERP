@@ -369,10 +369,6 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
     'Billing as per BOQ.',
     'No third-party inspection or any inspection charges bear by the Revira Nexgen.',
     'NDT test will be performed at shop only and excluding all machines, testing and consumables.',
-    'Closed workshop area to be provided for work by M/s company with fully equipped light and ventilations.',
-    'All Machines, Hydra, EOT cranes, raw materials, consumables, bed material. Skids for fabrication.',
-    'Detailing to be provided by your company',
-    'All shop drawing, BOQ, LOT SUMMARY to be provided by M/s company.',
   ],
   notesBlocks: [
     createNotesBlock("Notes", [
@@ -381,17 +377,13 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
       'Billing as per BOQ.',
       'No third-party inspection or any inspection charges bear by the Revira Nexgen.',
       'NDT test will be performed at shop only and excluding all machines, testing and consumables.',
-      'Closed workshop area to be provided for work by M/s company with fully equipped light and ventilations.',
-      'All Machines, Hydra, EOT cranes, raw materials, consumables, bed material. Skids for fabrication.',
-      'Detailing to be provided by your company',
-      'All shop drawing, BOQ, LOT SUMMARY to be provided by M/s company.',
     ]),
   ],
   closingParagraphs: [
     { id: 'closing1', type: 'paragraph', content: "We hope you'll find our offer in line with your requirement & place your valued WO on us giving us an opportunity to serve you. However, please feel free to contact us for any sort of additional information that you may feel is required pertaining to this offer. We assure you our best support at all times." },
   ],
   closingThanks: 'Thanking you',
-  closingCompanyName: 'Revira Nexgen Structures Pvt. Ltd',
+  closingCompanyName: 'Revira Nexgen Structures Pvt. Ltd.',
   scopeBriefDetails: [
     { slNo: 1, description: 'Building Nos.', details: '01' },
     { slNo: 2, description: 'Building Description', details: 'PEB Shed' },
@@ -474,7 +466,7 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
   ],
   paymentTermSections: getDefaultPaymentTermSections(),
   commercialTerms: [
-    { slNo: 1, description: 'Payment Terms including taxes', conditions: 'Supply and Erection amount: 1. 20% advance on confirmation of order/PO. 2. 40% after finalisation & submission of GA drawing. 3. 30% before dispatch of material. 4. 5% after Structure Erection. 5. 5% after Building Handing over.' },
+    { slNo: 1, description: 'Payment Terms including taxes', conditions: 'As above' },
     { slNo: 2, description: 'Delivery period', conditions: 'Delivery as per mutually agreed from the date of receipt of signed approved drawings and receipt of payment as per agreed terms.' },
     { slNo: 3, description: 'Erection period', conditions: 'Erection Period as per mutually agreed after delivery of complete material.' },
     { slNo: 4, description: 'GST', conditions: 'Extra @ 18% for supply and Erection both.' },
@@ -1610,6 +1602,9 @@ export default function QuotationPage() {
           pdf.addPage();
           currentPage++;
           addHeaderFooterStamp(currentPage);
+          // Ensure continued content after page break keeps normal body styling.
+          pdf.setTextColor(0, 0, 0);
+          pdf.setFont('helvetica', 'normal');
           currentY = headerHeight + 10;
           return true;
         }
@@ -2061,7 +2056,7 @@ export default function QuotationPage() {
       currentY += 6;
       
       pdf.setTextColor('#da2032');
-      pdf.text(contentSections.closingCompanyName || 'Revira Nexgen Structures Pvt. Ltd', margin, currentY);
+      pdf.text(contentSections.closingCompanyName || 'Revira Nexgen Structures Pvt. Ltd.', margin, currentY);
 
       const uploadDrawings = ensureDrawingUploads(contentSections.uploadDrawings).filter((item) => item.dataUrl);
       if (uploadDrawings.length > 0) {
@@ -3519,17 +3514,8 @@ export default function QuotationPage() {
                       </div>
 
                       <div className="pt-4 border-t">
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="mb-2">
                           <h4 className="font-semibold text-slate-700">Bank Details:</h4>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={addBankDetail}
-                            className="text-[#da2032]"
-                            data-testid="button-add-bank-detail"
-                          >
-                            <Plus className="h-4 w-4 mr-1" /> Add
-                          </Button>
                         </div>
                         <table className="w-full text-sm">
                           <thead>
@@ -3610,6 +3596,9 @@ export default function QuotationPage() {
                             ))}
                           </tbody>
                         </table>
+                        <div className="p-3 border-t bg-gradient-to-b from-white to-slate-50/70 text-center">
+                          <FooterAddButton label="Add Item" onClick={addBankDetail} testId="button-add-bank-detail" />
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -3876,7 +3865,7 @@ export default function QuotationPage() {
                   <Input
                     value={contentSections.closingThanks}
                     onChange={(e) => setContentSections(prev => ({ ...prev, closingThanks: e.target.value }))}
-                    className="font-semibold text-slate-700 bg-transparent border-transparent hover:border-slate-200 focus:border-slate-300 w-auto"
+                    className="font-semibold text-slate-700 bg-transparent border-transparent hover:border-slate-200 focus:border-slate-300 w-full"
                     data-testid="input-closing-thanks"
                   />
                 </div>
@@ -3884,7 +3873,7 @@ export default function QuotationPage() {
                   <Input
                     value={contentSections.closingCompanyName}
                     onChange={(e) => setContentSections(prev => ({ ...prev, closingCompanyName: e.target.value }))}
-                    className="font-bold text-[#da2032] bg-transparent border-transparent hover:border-slate-200 focus:border-slate-300 w-auto"
+                    className="font-bold text-[#da2032] bg-transparent border-transparent hover:border-slate-200 focus:border-slate-300 w-full"
                     data-testid="input-closing-company"
                   />
                 </div>
