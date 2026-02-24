@@ -92,6 +92,12 @@ interface DrawingUploadItem {
   dataUrl: string;
 }
 
+interface NotesBlock {
+  id: string;
+  title: string;
+  items: string[];
+}
+
 type AccordionBlockType =
   | "scopeBrief"
   | "scopeBasic"
@@ -121,6 +127,29 @@ interface ScopeTableProps {
   onRemoveRow: (section: string, index: number) => void;
   onAddRow: (section: string) => void;
 }
+
+interface FooterAddButtonProps {
+  label: string;
+  onClick: () => void;
+  testId?: string;
+}
+
+const FooterAddButton = ({ label, onClick, testId }: FooterAddButtonProps) => (
+  <div className="relative flex w-full items-center justify-center">
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 border-t border-dotted border-[#d92134]"
+    />
+    <Button
+      type="button"
+      onClick={onClick}
+      className="relative z-10 h-10 min-w-[220px] rounded-full border border-[#d92134]/35 bg-white px-8 text-sm font-semibold text-[#d92134] shadow-none transition hover:bg-[#fff5f6]"
+      data-testid={testId}
+    >
+      + {label}
+    </Button>
+  </div>
+);
 
 const ScopeTable = memo(function ScopeTable({ 
   data, 
@@ -178,16 +207,8 @@ const ScopeTable = memo(function ScopeTable({
         </tbody>
       </table>
       {showAddButton && (
-        <div className="p-3 border-t bg-slate-50 text-center">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => onAddRow(section)}
-            className="text-[#d92134]"
-            data-testid={`button-add-${section}`}
-          >
-            <Plus className="h-4 w-4 mr-1" /> Add Ledger Entry
-          </Button>
+        <div className="p-3 border-t bg-gradient-to-b from-white to-slate-50/70 text-center">
+          <FooterAddButton label="Add Row" onClick={() => onAddRow(section)} testId={`button-add-${section}`} />
         </div>
       )}
     </div>
@@ -202,6 +223,7 @@ interface QuotationContentSections {
   introSections: ContentSection[];
   paymentTerms: string[];
   notes: string[];
+  notesBlocks: NotesBlock[];
   closingParagraphs: ContentSection[];
   closingThanks: string;
   closingCompanyName: string;
@@ -305,6 +327,30 @@ const normalizePaymentTermSections = (value: unknown, fallbackTerms?: string[]):
   return getDefaultPaymentTermSections();
 };
 
+const createNotesBlock = (title: string, items: string[]): NotesBlock => ({
+  id: `notes-block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  title,
+  items,
+});
+
+const normalizeNotesBlocks = (value: unknown, fallbackNotes?: string[]): NotesBlock[] => {
+  if (Array.isArray(value) && value.length > 0) {
+    const normalized = value
+      .filter((item): item is Partial<NotesBlock> => Boolean(item && typeof item === "object"))
+      .map((item, index) => ({
+        id: typeof item.id === "string" && item.id.trim() ? item.id : `notes-block-${Date.now()}-${index}`,
+        title: typeof item.title === "string" && item.title.trim() ? item.title : `Notes ${index + 1}`,
+        items: Array.isArray(item.items) ? item.items.filter((n): n is string => typeof n === "string") : [],
+      }))
+      .map((block) => ({ ...block, items: block.items.length > 0 ? block.items : ["New note..."] }));
+    if (normalized.length > 0) return normalized;
+  }
+  if (Array.isArray(fallbackNotes) && fallbackNotes.length > 0) {
+    return [createNotesBlock("Notes", fallbackNotes)];
+  }
+  return [createNotesBlock("Notes", ["New note..."])];
+};
+
 const defaultSupplyFabricationContent: QuotationContentSections = {
   proposalTitle: 'Techno-Commercial Offer',
   introSections: [
@@ -327,6 +373,19 @@ const defaultSupplyFabricationContent: QuotationContentSections = {
     'All Machines, Hydra, EOT cranes, raw materials, consumables, bed material. Skids for fabrication.',
     'Detailing to be provided by your company',
     'All shop drawing, BOQ, LOT SUMMARY to be provided by M/s company.',
+  ],
+  notesBlocks: [
+    createNotesBlock("Notes", [
+      'Above mentioned rates are quoted on the basis of inputs received and discussion.',
+      'GST @ 18% Extra.',
+      'Billing as per BOQ.',
+      'No third-party inspection or any inspection charges bear by the Revira Nexgen.',
+      'NDT test will be performed at shop only and excluding all machines, testing and consumables.',
+      'Closed workshop area to be provided for work by M/s company with fully equipped light and ventilations.',
+      'All Machines, Hydra, EOT cranes, raw materials, consumables, bed material. Skids for fabrication.',
+      'Detailing to be provided by your company',
+      'All shop drawing, BOQ, LOT SUMMARY to be provided by M/s company.',
+    ]),
   ],
   closingParagraphs: [
     { id: 'closing1', type: 'paragraph', content: "We hope you'll find our offer in line with your requirement & place your valued WO on us giving us an opportunity to serve you. However, please feel free to contact us for any sort of additional information that you may feel is required pertaining to this offer. We assure you our best support at all times." },
@@ -536,7 +595,8 @@ export default function QuotationPage() {
 
   const [contentSections, setContentSections] = useState<QuotationContentSections>(defaultSupplyFabricationContent);
   const [editingSection, setEditingSection] = useState<string | null>(null);
-  const [editingNote, setEditingNote] = useState<number | null>(null);
+  const [editingNote, setEditingNote] = useState<{ blockId: string; noteIndex: number } | null>(null);
+  const [editingNotesBlockHeadingId, setEditingNotesBlockHeadingId] = useState<string | null>(null);
   const [editingPaymentTermHeading, setEditingPaymentTermHeading] = useState<string | null>(null);
   const [editingPaymentTermItem, setEditingPaymentTermItem] = useState<{ sectionId: string; termIndex: number } | null>(null);
   const [expandedPaymentTermSections, setExpandedPaymentTermSections] = useState<Record<string, boolean>>({});
@@ -720,6 +780,15 @@ export default function QuotationPage() {
           setContentSections(prev => ({
             ...prev,
             ...parsedContentSections,
+            notes: Array.isArray((parsedContentSections as any)?.notes)
+              ? (parsedContentSections as any).notes.filter((note: unknown): note is string => typeof note === "string")
+              : prev.notes,
+            notesBlocks: normalizeNotesBlocks(
+              (parsedContentSections as any)?.notesBlocks,
+              Array.isArray((parsedContentSections as any)?.notes)
+                ? (parsedContentSections as any).notes.filter((note: unknown): note is string => typeof note === "string")
+                : prev.notes
+            ),
             paymentTermSections: normalizePaymentTermSections((parsedContentSections as any)?.paymentTermSections, legacyPaymentTerms),
             uploadDrawings: normalizeDrawingUploads((parsedContentSections as any)?.uploadDrawings),
           }));
@@ -1004,26 +1073,66 @@ export default function QuotationPage() {
     }));
   };
 
-  const addNote = () => {
-    setContentSections(prev => ({
-      ...prev,
-      notes: [...prev.notes, 'New note...']
-    }));
-    setEditingNote(contentSections.notes.length);
+  const addNoteItem = (blockId: string) => {
+    setContentSections((prev) => {
+      const blocks = normalizeNotesBlocks(prev.notesBlocks, prev.notes).map((block) =>
+        block.id === blockId ? { ...block, items: [...block.items, "New note..."] } : block
+      );
+      return { ...prev, notesBlocks: blocks, notes: blocks[0]?.items ?? prev.notes };
+    });
   };
 
-  const updateNote = (index: number, content: string) => {
-    setContentSections(prev => ({
-      ...prev,
-      notes: prev.notes.map((n, i) => i === index ? content : n)
-    }));
+  const updateNoteItem = (blockId: string, index: number, content: string) => {
+    setContentSections((prev) => {
+      const blocks = normalizeNotesBlocks(prev.notesBlocks, prev.notes).map((block) =>
+        block.id === blockId
+          ? { ...block, items: block.items.map((n, i) => (i === index ? content : n)) }
+          : block
+      );
+      return { ...prev, notesBlocks: blocks, notes: blocks[0]?.items ?? prev.notes };
+    });
   };
 
-  const removeNote = (index: number) => {
-    setContentSections(prev => ({
-      ...prev,
-      notes: prev.notes.filter((_, i) => i !== index)
-    }));
+  const removeNoteItem = (blockId: string, index: number) => {
+    setContentSections((prev) => {
+      const blocks = normalizeNotesBlocks(prev.notesBlocks, prev.notes).map((block) => {
+        if (block.id !== blockId) return block;
+        const nextItems = block.items.filter((_, i) => i !== index);
+        return { ...block, items: nextItems.length > 0 ? nextItems : ["New note..."] };
+      });
+      return { ...prev, notesBlocks: blocks, notes: blocks[0]?.items ?? prev.notes };
+    });
+  };
+
+  const duplicateNotesBlock = (blockId: string) => {
+    setContentSections((prev) => {
+      const blocks = normalizeNotesBlocks(prev.notesBlocks, prev.notes);
+      const source = blocks.find((block) => block.id === blockId);
+      if (!source) return prev;
+      const duplicate = createNotesBlock(`${source.title} Copy`, [...source.items]);
+      const nextBlocks = [...blocks, duplicate];
+      return { ...prev, notesBlocks: nextBlocks, notes: nextBlocks[0]?.items ?? prev.notes };
+    });
+  };
+
+  const updateNotesBlockHeading = (blockId: string, heading: string) => {
+    setContentSections((prev) => {
+      const blocks = normalizeNotesBlocks(prev.notesBlocks, prev.notes).map((block) =>
+        block.id === blockId ? { ...block, title: heading } : block
+      );
+      return { ...prev, notesBlocks: blocks, notes: blocks[0]?.items ?? prev.notes };
+    });
+  };
+
+  const deleteNotesBlock = (blockId: string) => {
+    setContentSections((prev) => {
+      const blocks = normalizeNotesBlocks(prev.notesBlocks, prev.notes);
+      if (blocks.length <= 1) return prev;
+      const nextBlocks = blocks.filter((block) => block.id !== blockId);
+      return { ...prev, notesBlocks: nextBlocks, notes: nextBlocks[0]?.items ?? prev.notes };
+    });
+    setEditingNote((prev) => (prev?.blockId === blockId ? null : prev));
+    setEditingNotesBlockHeadingId((prev) => (prev === blockId ? null : prev));
   };
 
   const addPaymentTermSection = () => {
@@ -1926,9 +2035,12 @@ export default function QuotationPage() {
       });
       
       checkNewPage(30);
-      addTitle('Notes:', 11, '#333333');
-      contentSections.notes.forEach((note, idx) => {
-        addText(`${idx + 1}. ${note}`, 9, 5);
+      normalizeNotesBlocks(contentSections.notesBlocks, contentSections.notes).forEach((block) => {
+        addTitle(`${block.title}:`, 11, '#333333');
+        block.items.forEach((note, idx) => {
+          addText(`${idx + 1}. ${note}`, 9, 5);
+        });
+        currentY += 2;
       });
       
       currentY += 7;
@@ -2873,7 +2985,6 @@ export default function QuotationPage() {
                   number="" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                  onAdd={addApplicableCode}
                   {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
@@ -2915,6 +3026,9 @@ export default function QuotationPage() {
                           </li>
                         ))}
                       </ul>
+                      <div className="mt-4 border-t pt-3 flex justify-center">
+                        <FooterAddButton label="Add Item" onClick={addApplicableCode} />
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -2945,7 +3059,6 @@ export default function QuotationPage() {
                   number="09" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                  onAdd={addDrawingsDeliveryItem}
                   {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
@@ -2987,6 +3100,9 @@ export default function QuotationPage() {
                           </li>
                         ))}
                       </ul>
+                      <div className="mt-4 border-t pt-3 flex justify-center">
+                        <FooterAddButton label="Add Item" onClick={addDrawingsDeliveryItem} />
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -3001,7 +3117,6 @@ export default function QuotationPage() {
                   number="10" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                  onAdd={addErectionClientItem}
                   {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
@@ -3043,6 +3158,9 @@ export default function QuotationPage() {
                           </li>
                         ))}
                       </ul>
+                      <div className="mt-4 border-t pt-3 flex justify-center">
+                        <FooterAddButton label="Add Item" onClick={addErectionClientItem} />
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -3057,7 +3175,6 @@ export default function QuotationPage() {
                   number="11" 
                   expanded={isBlockExpanded(blockInstance.id)}
                   onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                  onAdd={addErectionCompanyItem}
                   {...getBlockHeaderProps(blockInstance)}
                 />
                 {isBlockExpanded(blockInstance.id) && (
@@ -3099,6 +3216,9 @@ export default function QuotationPage() {
                           </li>
                         ))}
                       </ul>
+                      <div className="mt-4 border-t pt-3 flex justify-center">
+                        <FooterAddButton label="Add Item" onClick={addErectionCompanyItem} />
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -3215,16 +3335,8 @@ export default function QuotationPage() {
                   </tr>
                 </tbody>
               </table>
-              <div className="p-3 border-t bg-slate-50 text-center">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={addLineItem}
-                  className="text-[#d92134]"
-                  data-testid="button-add-row"
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Add Row
-                </Button>
+              <div className="p-3 border-t bg-gradient-to-b from-white to-slate-50/70 text-center">
+                <FooterAddButton label="Add Row" onClick={addLineItem} testId="button-add-row" />
               </div>
             </div>
 
@@ -3253,7 +3365,6 @@ export default function QuotationPage() {
                       number="PT"
                       expanded={isBlockExpanded(blockInstance.id)}
                       onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                      onAdd={addPaymentTermSection}
                       {...getBlockHeaderProps(blockInstance)}
                     />
                   </div>
@@ -3403,6 +3514,9 @@ export default function QuotationPage() {
                           </div>
                         );
                       })}
+                      <div className="mt-2 border-t pt-3 flex justify-center">
+                        <FooterAddButton label="Add Section" onClick={addPaymentTermSection} />
+                      </div>
 
                       <div className="pt-4 border-t">
                         <div className="flex items-center justify-between mb-2">
@@ -3522,7 +3636,6 @@ export default function QuotationPage() {
                       number="08" 
                       expanded={isBlockExpanded(blockInstance.id)}
                       onToggle={() => toggleBlockExpanded(blockInstance.id)}
-                      onAdd={addCommercialTerm}
                       {...getBlockHeaderProps(blockInstance)}
                     />
                   </div>
@@ -3614,6 +3727,9 @@ export default function QuotationPage() {
                           </tbody>
                         </table>
                       </div>
+                      <div className="p-3 border-t bg-gradient-to-b from-white to-slate-50/70 text-center">
+                        <FooterAddButton label="Add Row" onClick={addCommercialTerm} />
+                      </div>
                     </CardContent>
                   </Card>
                 </AccordionContent>
@@ -3623,63 +3739,108 @@ export default function QuotationPage() {
           </div>
 
           {/* Notes Section */}
-          <Card className="shadow-sm">
-            <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
-              <h3 className="font-semibold text-slate-700">Notes</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={addNote}
-                className="text-[#da2032]"
-                data-testid="button-add-note"
-              >
-                <Plus className="h-4 w-4 mr-1" /> Add
-              </Button>
-            </div>
-            <CardContent className="p-6">
-              <ul className="space-y-2 text-sm">
-                {contentSections.notes.map((note, index) => (
-                  <li key={index} className="group flex items-start gap-2">
-                    {editingNote === index ? (
-                      <>
-                        <Textarea
-                          value={note}
-                          onChange={(e) => updateNote(index, e.target.value)}
-                          className="flex-1 min-h-[40px]"
-                          autoFocus
-                          onBlur={() => setEditingNote(null)}
-                        />
-                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeNote(index)}>
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="w-6 text-slate-400">{index + 1}.</span>
-                        <span 
-                          className="cursor-pointer hover:bg-slate-50 flex-1 p-1 rounded"
-                          onClick={() => setEditingNote(index)}
-                        >
-                          {note}
-                        </span>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                          onClick={() => setEditingNote(index)}
-                        >
-                          <Edit3 className="h-3 w-3 text-slate-400" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeNote(index)}>
-                              <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+          {normalizeNotesBlocks(contentSections.notesBlocks, contentSections.notes).map((notesBlock, blockIndex, allBlocks) => (
+            <Card key={notesBlock.id} className="shadow-sm">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-slate-50">
+                {editingNotesBlockHeadingId === notesBlock.id ? (
+                  <Input
+                    value={notesBlock.title}
+                    onChange={(e) => updateNotesBlockHeading(notesBlock.id, e.target.value)}
+                    className="h-8 max-w-sm font-semibold text-slate-700 bg-white"
+                    autoFocus
+                    onBlur={() => {
+                      updateNotesBlockHeading(notesBlock.id, notesBlock.title.trim() || "Notes");
+                      setEditingNotesBlockHeadingId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === "Escape") {
+                        updateNotesBlockHeading(notesBlock.id, notesBlock.title.trim() || "Notes");
+                        setEditingNotesBlockHeadingId(null);
+                      }
+                    }}
+                    data-testid={`input-notes-block-heading-${blockIndex}`}
+                  />
+                ) : (
+                  <h3
+                    className="font-semibold text-slate-700 cursor-pointer hover:text-[#d92134]"
+                    onClick={() => setEditingNotesBlockHeadingId(notesBlock.id)}
+                    data-testid={`text-notes-block-heading-${blockIndex}`}
+                  >
+                    {notesBlock.title}
+                  </h3>
+                )}
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => duplicateNotesBlock(notesBlock.id)}
+                    className="h-8 border-[#d92134]/30 text-[#d92134] hover:bg-[#fff5f6]"
+                    data-testid={`button-duplicate-notes-block-${blockIndex}`}
+                  >
+                    <Copy className="h-4 w-4 mr-1" /> Duplicate
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => deleteNotesBlock(notesBlock.id)}
+                    disabled={allBlocks.length <= 1}
+                    className="h-8 border-red-200 text-red-600 hover:bg-red-50"
+                    data-testid={`button-delete-notes-block-${blockIndex}`}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" /> Delete
+                  </Button>
+                </div>
+              </div>
+              <CardContent className="p-6">
+                <ul className="space-y-2 text-sm">
+                  {notesBlock.items.map((note, index) => (
+                    <li key={`${notesBlock.id}-${index}`} className="group flex items-start gap-2">
+                      {editingNote?.blockId === notesBlock.id && editingNote?.noteIndex === index ? (
+                        <>
+                          <Textarea
+                            value={note}
+                            onChange={(e) => updateNoteItem(notesBlock.id, index, e.target.value)}
+                            className="flex-1 min-h-[40px]"
+                            autoFocus
+                            onBlur={() => setEditingNote(null)}
+                          />
+                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeNoteItem(notesBlock.id, index)}>
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-6 text-slate-400">{index + 1}.</span>
+                          <span
+                            className="cursor-pointer hover:bg-slate-50 flex-1 p-1 rounded"
+                            onClick={() => setEditingNote({ blockId: notesBlock.id, noteIndex: index })}
+                          >
+                            {note}
+                          </span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                            onClick={() => setEditingNote({ blockId: notesBlock.id, noteIndex: index })}
+                          >
+                            <Edit3 className="h-3 w-3 text-slate-400" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => removeNoteItem(notesBlock.id, index)}>
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+              <div className="p-3 border-t bg-gradient-to-b from-white to-slate-50/70 text-center">
+                <FooterAddButton label="Add Item" onClick={() => addNoteItem(notesBlock.id)} testId={`button-add-note-item-${blockIndex}`} />
+              </div>
+            </Card>
+          ))}
 
           {/* Closing Section */}
           <Card className="shadow-sm">
