@@ -40,6 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import type { Project, Client, Quotation, QuotationItem, Branding } from "@shared/schema";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -83,6 +84,13 @@ interface PaymentTermSection {
   id: string;
   heading: string;
   terms: string[];
+}
+
+interface ConfirmDialogState {
+  open: boolean;
+  title: string;
+  description: string;
+  onConfirm: (() => void | Promise<void>) | null;
 }
 
 interface DrawingUploadItem {
@@ -601,6 +609,12 @@ export default function QuotationPage() {
   const [versionsDialogOpen, setVersionsDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: null,
+  });
   const [isExporting, setIsExporting] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
@@ -2662,23 +2676,29 @@ export default function QuotationPage() {
                 variant="outline" 
                 size="icon" 
                 className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-red-200"
-                onClick={async () => {
-                  if (confirm(`Are you sure you want to delete this quotation (${existingQuotation.revision})?`)) {
-                    try {
-                      await apiRequest("DELETE", `/api/quotations/${existingQuotation.id}`);
-                      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "quotation-versions"] });
-                      const remaining = quotationVersions.filter(q => q.id !== existingQuotation.id);
-                      if (remaining.length > 0) {
-                        setLocation(`/projects/${projectId}/quotation/${remaining[0].id}`);
-                      } else {
-                        setLocation(`/projects/${projectId}/quotation`);
+                onClick={() =>
+                  setConfirmDialog({
+                    open: true,
+                    title: "Delete Quotation?",
+                    description: `Are you sure you want to delete this quotation (${existingQuotation.revision})?`,
+                    onConfirm: async () => {
+                      if (!existingQuotation) return;
+                      try {
+                        await apiRequest("DELETE", `/api/quotations/${existingQuotation.id}`);
+                        queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "quotation-versions"] });
+                        const remaining = quotationVersions.filter(q => q.id !== existingQuotation.id);
+                        if (remaining.length > 0) {
+                          setLocation(`/projects/${projectId}/quotation/${remaining[0].id}`);
+                        } else {
+                          setLocation(`/projects/${projectId}/quotation`);
+                        }
+                        toast({ title: "Quotation deleted", description: `${existingQuotation.revision} has been deleted.` });
+                      } catch (error) {
+                        toast({ title: "Error", description: "Failed to delete quotation.", variant: "destructive" });
                       }
-                      toast({ title: "Quotation deleted", description: `${existingQuotation.revision} has been deleted.` });
-                    } catch (error) {
-                      toast({ title: "Error", description: "Failed to delete quotation.", variant: "destructive" });
-                    }
-                  }
-                }}
+                    },
+                  })
+                }
                 data-testid="button-delete-quotation"
               >
                 <Trash2 className="h-4 w-4" />
@@ -3979,25 +3999,30 @@ export default function QuotationPage() {
                       size="sm"
                       variant="outline"
                       className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Are you sure you want to delete ${v.revision}?`)) {
-                          try {
-                            await apiRequest("DELETE", `/api/quotations/${v.id}`);
-                            queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "quotation-versions"] });
-                            if (existingQuotation?.id === v.id) {
-                              const remaining = quotationVersions.filter(q => q.id !== v.id);
-                              if (remaining.length > 0) {
-                                setLocation(`/projects/${projectId}/quotation/${remaining[0].id}`);
-                              } else {
-                                setLocation(`/projects/${projectId}/quotation`);
+                        setConfirmDialog({
+                          open: true,
+                          title: "Delete Quotation Version?",
+                          description: `Are you sure you want to delete ${v.revision}?`,
+                          onConfirm: async () => {
+                            try {
+                              await apiRequest("DELETE", `/api/quotations/${v.id}`);
+                              queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "quotation-versions"] });
+                              if (existingQuotation?.id === v.id) {
+                                const remaining = quotationVersions.filter(q => q.id !== v.id);
+                                if (remaining.length > 0) {
+                                  setLocation(`/projects/${projectId}/quotation/${remaining[0].id}`);
+                                } else {
+                                  setLocation(`/projects/${projectId}/quotation`);
+                                }
                               }
+                              toast({ title: "Version deleted", description: `${v.revision} has been deleted.` });
+                            } catch (error) {
+                              toast({ title: "Error", description: "Failed to delete version.", variant: "destructive" });
                             }
-                            toast({ title: "Version deleted", description: `${v.revision} has been deleted.` });
-                          } catch (error) {
-                            toast({ title: "Error", description: "Failed to delete version.", variant: "destructive" });
-                          }
-                        }
+                          },
+                        });
                       }}
                       data-testid={`button-delete-version-${v.id}`}
                     >
@@ -4117,6 +4142,23 @@ export default function QuotationPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <ConfirmActionDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmDialog({ open: false, title: "", description: "", onConfirm: null });
+          }
+        }}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={() => {
+          void confirmDialog.onConfirm?.();
+          setConfirmDialog({ open: false, title: "", description: "", onConfirm: null });
+        }}
+        confirmLabel="Delete"
+        confirmTestId="confirm-delete-quotation-action"
+        cancelTestId="cancel-delete-quotation-action"
+      />
     </LayoutShell>
   );
 }

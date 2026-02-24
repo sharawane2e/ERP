@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -60,10 +60,12 @@ const projectFormSchema = z.object({
 type ProjectFormData = z.infer<typeof projectFormSchema>;
 
 export default function ProjectsPage() {
+  const ROWS_PER_PAGE = 10;
   const [open, setOpen] = useState(false);
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { data: user } = useUser();
@@ -253,6 +255,23 @@ export default function ProjectsPage() {
         .includes(term),
     );
   }, [projects, searchTerm, clients]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / ROWS_PER_PAGE));
+
+  const paginatedProjects = useMemo(() => {
+    const startIndex = (currentPage - 1) * ROWS_PER_PAGE;
+    return filteredProjects.slice(startIndex, startIndex + ROWS_PER_PAGE);
+  }, [filteredProjects, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   return (
     <LayoutShell user={user}>
@@ -456,8 +475,9 @@ export default function ProjectsPage() {
               ))}
             </div>
           ) : filteredProjects.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {filteredProjects.map((project) => (
+            <>
+              <div className="divide-y divide-slate-100">
+              {paginatedProjects.map((project) => (
                 <div 
                   key={project.id}
                   data-testid={`row-project-${project.id}`}
@@ -597,7 +617,7 @@ export default function ProjectsPage() {
                 </div>
               ))}
 
-              {filteredProjects.map((project) => (
+              {paginatedProjects.map((project) => (
                 <div
                   key={`mobile-${project.id}`}
                   className="md:hidden px-4 py-4 space-y-3 hover:bg-slate-50/50"
@@ -683,7 +703,35 @@ export default function ProjectsPage() {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/60 px-4 py-3">
+                <p className="text-sm text-slate-600">
+                  Page {currentPage} of {totalPages} | {filteredProjects.length} records
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    data-testid="button-projects-prev-page"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    data-testid="button-projects-next-page"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
           ) : (
             <div className="py-16 text-center">
               <div className="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-primary/10 to-teal-500/10 flex items-center justify-center mb-4">

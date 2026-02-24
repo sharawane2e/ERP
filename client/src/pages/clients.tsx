@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Users, Trash2, Pencil, Phone, Mail, MapPin, Building2, Search, Landmark } from "lucide-react";
 import { LayoutShell } from "@/components/layout-shell";
 import { useUser } from "@/hooks/use-auth";
-import type { Client } from "@shared/schema";
+import type { Client, Project } from "@shared/schema";
 import { useLocation } from "wouter";
 
 const clientFormSchema = z.object({
@@ -54,15 +54,21 @@ const withLegacyClientDefaults = (data: ClientFormData): ClientFormData => ({
 });
 
 export default function ClientsPage() {
+  const ROWS_PER_PAGE = 10;
   const [open, setOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [infoDialogOpen, setInfoDialogOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { data: user } = useUser();
 
   const { data: clients, isLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
+  });
+  const { data: projects } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
   });
 
   const form = useForm<ClientFormData>({
@@ -177,6 +183,15 @@ export default function ClientsPage() {
     }
   };
 
+  const handleDeleteClient = (clientId: number) => {
+    const hasInitiatedProject = (projects ?? []).some((project) => project.clientId === clientId);
+    if (hasInitiatedProject) {
+      setInfoDialogOpen(true);
+      return;
+    }
+    deleteMutation.mutate(clientId);
+  };
+
   const filteredClients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     const sorted = [...(clients ?? [])].sort((a, b) => b.id - a.id);
@@ -196,6 +211,23 @@ export default function ClientsPage() {
         .includes(term),
     );
   }, [clients, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / ROWS_PER_PAGE));
+
+  const paginatedClients = useMemo(() => {
+    const startIndex = (currentPage - 1) * ROWS_PER_PAGE;
+    return filteredClients.slice(startIndex, startIndex + ROWS_PER_PAGE);
+  }, [filteredClients, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   return (
     <LayoutShell user={user}>
@@ -444,8 +476,9 @@ export default function ClientsPage() {
               ))}
             </div>
           ) : filteredClients.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {filteredClients.map((client) => (
+            <>
+              <div className="divide-y divide-slate-100">
+              {paginatedClients.map((client) => (
                 <div
                   key={client.id}
                   data-testid={`row-client-${client.id}`}
@@ -546,7 +579,7 @@ export default function ClientsPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
-                      onClick={() => deleteMutation.mutate(client.id)}
+                      onClick={() => handleDeleteClient(client.id)}
                       disabled={deleteMutation.isPending}
                       data-testid={`button-delete-client-${client.id}`}
                       title="Delete Client"
@@ -557,7 +590,7 @@ export default function ClientsPage() {
                 </div>
               ))}
 
-              {filteredClients.map((client) => (
+              {paginatedClients.map((client) => (
                 <div
                   key={`mobile-${client.id}`}
                   className="md:hidden px-4 py-4 space-y-2 hover:bg-slate-50/50"
@@ -596,7 +629,7 @@ export default function ClientsPage() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => deleteMutation.mutate(client.id)}
+                        onClick={() => handleDeleteClient(client.id)}
                         disabled={deleteMutation.isPending}
                         data-testid={`button-delete-client-mobile-${client.id}`}
                       >
@@ -621,7 +654,35 @@ export default function ClientsPage() {
                   </p>
                 </div>
               ))}
-            </div>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/60 px-4 py-3">
+                <p className="text-sm text-slate-600">
+                  Page {currentPage} of {totalPages} | {filteredClients.length} records
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    data-testid="button-clients-prev-page"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    data-testid="button-clients-next-page"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
           ) : (
             <div className="py-16 text-center">
               <div className="mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-primary/10 to-blue-500/10 flex items-center justify-center mb-4">
@@ -644,6 +705,22 @@ export default function ClientsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={infoDialogOpen} onOpenChange={setInfoDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Client Delete Info</DialogTitle>
+            <DialogDescription>
+              Client is not deleted due to multiple project is initiated
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end">
+            <Button onClick={() => setInfoDialogOpen(false)} data-testid="button-close-client-delete-info">
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </LayoutShell>
   );
 }
