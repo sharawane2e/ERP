@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, FileText, Download, Trash2, Copy, Eye, Plus, X, MapPin, Mail, MessageCircle } from "lucide-react";
+import { ArrowLeft, Save, FileText, Download, Trash2, Copy, Eye, MapPin, Mail, MessageCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { LayoutShell } from "@/components/layout-shell";
 import { useUser } from "@/hooks/use-auth";
 import type { Project, Client, GatePass, GatePassItem, Branding } from "@shared/schema";
@@ -59,6 +60,36 @@ interface GatePassContentSectionsData {
   dispatchGatePass?: string;
 }
 
+interface FooterAddButtonProps {
+  label: string;
+  onClick: () => void;
+  testId?: string;
+}
+
+const FooterAddButton = ({ label, onClick, testId }: FooterAddButtonProps) => (
+  <div className="relative flex w-full items-center justify-center">
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 border-t border-dotted border-[#d92134]"
+    />
+    <Button
+      type="button"
+      onClick={onClick}
+      className="relative z-10 h-10 min-w-[220px] rounded-full border border-[#d92134]/35 bg-white px-8 text-sm font-semibold text-[#d92134] shadow-none transition hover:bg-[#fff5f6]"
+      data-testid={testId}
+    >
+      + {label}
+    </Button>
+  </div>
+);
+
+interface ConfirmDialogState {
+  open: boolean;
+  title: string;
+  description: string;
+  onConfirm: (() => void) | null;
+}
+
 export default function GatePassPage() {
   type SignatureField =
     | "storeKeeperSignature"
@@ -83,6 +114,12 @@ export default function GatePassPage() {
   const [whatsAppForm, setWhatsAppForm] = useState({
     mobile: "",
     message: "",
+  });
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    open: false,
+    title: "",
+    description: "",
+    onConfirm: null,
   });
 
   const [gatePassData, setGatePassData] = useState({
@@ -1571,11 +1608,14 @@ export default function GatePassPage() {
                 variant="outline" 
                 size="icon" 
                 className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-red-200"
-                onClick={async () => {
-                  if (confirm(`Are you sure you want to delete this gate pass (${existingGatePass.revision})?`)) {
-                    deleteGatePassMutation.mutate(existingGatePass.id);
-                  }
-                }}
+                onClick={() =>
+                  setConfirmDialog({
+                    open: true,
+                    title: "Delete Gate Pass?",
+                    description: `Are you sure you want to delete this gate pass (${existingGatePass.revision})?`,
+                    onConfirm: () => deleteGatePassMutation.mutate(existingGatePass.id),
+                  })
+                }
                 data-testid="button-delete-gate-pass"
               >
                 <Trash2 className="h-4 w-4" />
@@ -1671,12 +1711,8 @@ export default function GatePassPage() {
 
         {/* Line Items Table */}
         <Card>
-          <CardHeader className="bg-slate-100 flex flex-row items-center justify-between">
+          <CardHeader className="bg-slate-100">
             <CardTitle className="text-lg text-slate-700">GATE PASS ITEMS</CardTitle>
-            <Button size="sm" onClick={addLineItem} data-testid="button-add-item">
-              <Plus className="w-4 h-4 mr-1" />
-              Add Item
-            </Button>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -1753,10 +1789,10 @@ export default function GatePassPage() {
                           size="icon"
                           onClick={() => removeLineItem(item.id)}
                           disabled={lineItems.length === 1}
-                          className="text-red-500 hover:text-red-700"
+                          className="h-8 w-8 text-red-500 hover:text-red-700"
                           data-testid={`button-remove-item-${item.id}`}
                         >
-                          <X className="w-4 h-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </td>
                     </tr>
@@ -1777,6 +1813,9 @@ export default function GatePassPage() {
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div className="p-3 border-t bg-gradient-to-b from-white to-slate-50/70 text-center">
+              <FooterAddButton label="Add Row" onClick={addLineItem} testId="button-add-item" />
             </div>
           </CardContent>
         </Card>
@@ -1917,9 +1956,12 @@ export default function GatePassPage() {
                       className="text-red-500 hover:text-red-700 hover:bg-red-50"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Are you sure you want to delete version ${v.revision}?`)) {
-                          deleteGatePassMutation.mutate(v.id);
-                        }
+                        setConfirmDialog({
+                          open: true,
+                          title: "Delete Gate Pass Version?",
+                          description: `Are you sure you want to delete version ${v.revision}?`,
+                          onConfirm: () => deleteGatePassMutation.mutate(v.id),
+                        });
                       }}
                       data-testid={`button-delete-version-${v.id}`}
                     >
@@ -2035,6 +2077,23 @@ export default function GatePassPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <ConfirmActionDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmDialog({ open: false, title: "", description: "", onConfirm: null });
+          }
+        }}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        onConfirm={() => {
+          confirmDialog.onConfirm?.();
+          setConfirmDialog({ open: false, title: "", description: "", onConfirm: null });
+        }}
+        confirmLabel="Delete"
+        confirmTestId="confirm-delete-gate-pass-action"
+        cancelTestId="cancel-delete-gate-pass-action"
+      />
     </LayoutShell>
   );
 }

@@ -116,6 +116,7 @@ export default function DashboardPage() {
         projectId: q.projectId,
         revision: q.revision,
         createdAt: q.createdAt,
+        targetPath: `/revira/projects/${q.projectId}/quotation/${q.id}`,
       })),
       ...invoices.map((i) => ({
         id: `i-${i.id}`,
@@ -124,6 +125,7 @@ export default function DashboardPage() {
         projectId: i.projectId,
         revision: i.revision,
         createdAt: i.createdAt,
+        targetPath: `/revira/projects/${i.projectId}/invoice/${i.id}`,
       })),
       ...gatePasses.map((g) => ({
         id: `g-${g.id}`,
@@ -132,6 +134,7 @@ export default function DashboardPage() {
         projectId: g.projectId,
         revision: g.revision,
         createdAt: g.createdAt,
+        targetPath: `/revira/projects/${g.projectId}/gate-pass/${g.id}`,
       })),
       ...deliveryChallans.map((d) => ({
         id: `d-${d.id}`,
@@ -140,10 +143,11 @@ export default function DashboardPage() {
         projectId: d.projectId,
         revision: d.revision,
         createdAt: d.createdAt,
+        targetPath: `/revira/projects/${d.projectId}/delivery-challan/${d.id}`,
       })),
     ];
 
-    return activities.sort((a, b) => toDateValue(b.createdAt) - toDateValue(a.createdAt)).slice(0, 8);
+    return activities.sort((a, b) => toDateValue(b.createdAt) - toDateValue(a.createdAt)).slice(0, 5);
   }, [quotations, invoices, gatePasses, deliveryChallans]);
 
   if (isLoading) return null;
@@ -216,9 +220,12 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-2">
                   {recentActivity.map((activity) => (
-                    <div
+                    <button
+                      type="button"
                       key={activity.id}
-                      className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2.5"
+                      className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                      onClick={() => setLocation(activity.targetPath)}
+                      data-testid={`button-dashboard-activity-${activity.id}`}
                     >
                       <div>
                         <p className="text-sm font-semibold text-slate-900">
@@ -231,7 +238,7 @@ export default function DashboardPage() {
                       <p className="text-xs text-slate-500">
                         {activity.createdAt ? new Date(activity.createdAt).toLocaleDateString("en-IN") : "-"}
                       </p>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}

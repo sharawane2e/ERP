@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
 import { 
   Plus, 
   Users as UsersIcon, 
@@ -69,6 +70,7 @@ export default function UsersPage() {
   const [open, setOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [selectedClients, setSelectedClients] = useState<number[]>([]);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const { toast } = useToast();
   const { data: currentUser } = useUser();
 
@@ -539,11 +541,7 @@ export default function UsersPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => {
-                              if (confirm(`Are you sure you want to delete ${user.name}?`)) {
-                                deleteMutation.mutate(user.id);
-                              }
-                            }}
+                            onClick={() => setUserToDelete(user)}
                             disabled={deleteMutation.isPending}
                             data-testid={`button-delete-user-${user.id}`}
                             title="Delete User"
@@ -579,6 +577,26 @@ export default function UsersPage() {
           )}
         </CardContent>
       </Card>
+      <ConfirmActionDialog
+        open={!!userToDelete}
+        onOpenChange={(open) => {
+          if (!open) setUserToDelete(null);
+        }}
+        title="Delete User?"
+        description={
+          userToDelete
+            ? `Are you sure you want to delete ${userToDelete.name}? This action cannot be undone.`
+            : ""
+        }
+        onConfirm={() => {
+          if (!userToDelete) return;
+          deleteMutation.mutate(userToDelete.id);
+          setUserToDelete(null);
+        }}
+        confirmLabel="Delete"
+        confirmTestId="confirm-delete-user"
+        cancelTestId="cancel-delete-user"
+      />
     </LayoutShell>
   );
 }
