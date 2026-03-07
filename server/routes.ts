@@ -19,20 +19,21 @@ export async function registerRoutes(
   const resolveSmtpConfig = () => {
     const smtpHostRaw = process.env.SMTP_HOST?.trim();
     const smtpUserRaw = process.env.SMTP_USER?.trim();
+    const smtpPassRaw = process.env.SMTP_PASS?.trim();
     const smtpFromRaw = process.env.SMTP_FROM?.trim();
     const gmailUserRaw = process.env.GMAIL_USER?.trim();
     const gmailAppPasswordRaw = process.env.GMAIL_APP_PASSWORD?.trim();
 
-    const user = smtpUserRaw || gmailUserRaw;
-    const pass = gmailAppPasswordRaw;
-    const host = smtpHostRaw || (user ? "smtp.gmail.com" : undefined);
-    const port = Number(process.env.SMTP_PORT || (host === "smtp.gmail.com" ? 465 : 587));
+    const user = smtpUserRaw || gmailUserRaw || "info@reviranexgen.com";
+    const pass = smtpPassRaw || gmailAppPasswordRaw;
+    const host = smtpHostRaw || "mail.reviranexgen.com";
+    const port = Number(process.env.SMTP_PORT || 465);
     const from = smtpFromRaw || user;
 
     const missingKeys = [
       !host ? "SMTP_HOST" : null,
       !user ? "SMTP_USER or GMAIL_USER" : null,
-      !pass ? "GMAIL_APP_PASSWORD" : null,
+      !pass ? "SMTP_PASS or GMAIL_APP_PASSWORD" : null,
       !from ? "SMTP_FROM" : null,
     ].filter(Boolean) as string[];
 
@@ -392,10 +393,23 @@ export async function registerRoutes(
   const handleSendDocumentEmail = async (
     req: any,
     res: any,
-    documentLabel: "quotation" | "invoice" | "gate pass" | "delivery challan"
+    documentLabel: "quotation" | "invoice" | "gate pass" | "delivery challan" | "bulk email"
   ) => {
     try {
       const emailSchema = z.string().email();
+      const stripHtml = (html: string) =>
+        html
+          .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, " ")
+          .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, " ")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/gi, " ")
+          .replace(/&amp;/gi, "&")
+          .replace(/&lt;/gi, "<")
+          .replace(/&gt;/gi, ">")
+          .replace(/&quot;/gi, '"')
+          .replace(/&#39;/gi, "'")
+          .replace(/\s+/g, " ")
+          .trim();
       const parseEmailList = (raw: string | string[]) => {
         const values = (Array.isArray(raw) ? raw : raw.split(/[,\s;]+/))
           .map((item) => item.trim())
@@ -407,6 +421,15 @@ export async function registerRoutes(
               code: z.ZodIssueCode.custom,
               path: ["to"],
               message: "Please provide at least one recipient email address.",
+            },
+          ]);
+        }
+        if (unique.length > 100) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ["to"],
+              message: "Maximum 100 recipient email addresses are allowed.",
             },
           ]);
         }
@@ -427,9 +450,13 @@ export async function registerRoutes(
         to: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
         subject: z.string().min(1),
         message: z.string().min(1),
+        messageFormat: z.enum(["text", "html"]).optional(),
         fileName: z.string().min(1),
         pdfBase64: z.string().min(1),
       }).parse(req.body);
+      const messageFormat = input.messageFormat || "text";
+      const plainTextMessage =
+        messageFormat === "html" ? stripHtml(input.message) || " " : input.message;
       const recipients = parseEmailList(input.to);
       const copyRecipient = "reviranexgen@gmail.com";
       const normalizedCopyRecipient = copyRecipient.toLowerCase();
@@ -494,8 +521,10 @@ export async function registerRoutes(
         const base64 = (v: string) => Buffer.from(v, "utf8").toString("base64");
         const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         const wrap76 = (value: string) => value.replace(/(.{1,76})/g, "$1\r\n").trim();
-        const safeText = input.message.replace(/\r?\n/g, "\r\n");
+        const safeText = plainTextMessage.replace(/\r?\n/g, "\r\n");
+        const safeHtml = input.message.replace(/\r?\n/g, "\r\n");
         const attachmentBase64 = wrap76(input.pdfBase64);
+        const hasHtml = messageFormat === "html";
         const messageData =
           [
             `From: ${smtpFrom}`,
@@ -505,11 +534,32 @@ export async function registerRoutes(
             `Content-Type: multipart/mixed; boundary="${boundary}"`,
             "",
             `--${boundary}`,
-            'Content-Type: text/plain; charset="utf-8"',
-            "Content-Transfer-Encoding: 7bit",
-            "",
-            safeText,
-            "",
+            ...(hasHtml
+              ? [
+                  `Content-Type: multipart/alternative; boundary="${boundary}_alt"`,
+                  "",
+                  `--${boundary}_alt`,
+                  'Content-Type: text/plain; charset="utf-8"',
+                  "Content-Transfer-Encoding: 7bit",
+                  "",
+                  safeText,
+                  "",
+                  `--${boundary}_alt`,
+                  'Content-Type: text/html; charset="utf-8"',
+                  "Content-Transfer-Encoding: 7bit",
+                  "",
+                  safeHtml,
+                  "",
+                  `--${boundary}_alt--`,
+                  "",
+                ]
+              : [
+                  'Content-Type: text/plain; charset="utf-8"',
+                  "Content-Transfer-Encoding: 7bit",
+                  "",
+                  safeText,
+                  "",
+                ]),
             `--${boundary}`,
             `Content-Type: application/pdf; name="${input.fileName}"`,
             "Content-Transfer-Encoding: base64",
@@ -567,7 +617,8 @@ export async function registerRoutes(
           to: toRecipients,
           bcc: bccRecipients,
           subject: input.subject,
-          text: input.message,
+          text: plainTextMessage,
+          html: messageFormat === "html" ? input.message : undefined,
           attachments: [
             {
               filename: input.fileName,
@@ -641,6 +692,11 @@ export async function registerRoutes(
   app.post("/api/delivery-challans/:id/send-email", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     return handleSendDocumentEmail(req, res, "delivery challan");
+  });
+
+  app.post("/api/email/bulk", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentEmail(req, res, "bulk email");
   });
 
   app.post("/api/email/test-smtp", async (req, res) => {
@@ -760,7 +816,7 @@ export async function registerRoutes(
       };
       const clickFirstVisible = async (page: any, selectors: string[]) => {
         for (const selector of selectors) {
-          const clicked = await page.evaluate((sel) => {
+          const clicked = await page.evaluate((sel: string) => {
             const nodes = Array.from(document.querySelectorAll(sel)) as HTMLElement[];
             const target = nodes.find((el) => {
               const style = window.getComputedStyle(el);

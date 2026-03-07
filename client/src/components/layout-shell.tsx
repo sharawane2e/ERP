@@ -13,7 +13,8 @@ import {
   Users,
   FolderKanban,
   Palette,
-  UserCog
+  UserCog,
+  Mail
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export function LayoutShell({ children, user }: LayoutShellProps) {
     { name: 'Clients', href: '/clients', icon: Users },
     { name: 'Projects', href: '/projects', icon: FolderKanban },
     { name: 'User Management', href: '/users', icon: UserCog },
+    { name: 'Bulk Email', href: '/bulk-email', icon: Mail },
     { name: 'Branding', href: '/branding', icon: Palette },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];

@@ -20,6 +20,7 @@ import LedgerPage from "@/pages/ledger";
 import ClientLedgerPage from "@/pages/client-ledger";
 import BrandingPage from "@/pages/branding";
 import SettingsPage from "@/pages/settings";
+import BulkEmailPage from "@/pages/bulk-email";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({
@@ -118,6 +119,11 @@ function Router() {
       {/* Settings Route */}
       <Route path="/settings">
         <ProtectedRoute component={SettingsPage} />
+      </Route>
+
+      {/* Bulk Email Route */}
+      <Route path="/bulk-email">
+        <ProtectedRoute component={BulkEmailPage} />
       </Route>
 
       {/* Fallback to 404 */}
