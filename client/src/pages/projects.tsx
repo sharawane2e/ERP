@@ -290,7 +290,7 @@ export default function ProjectsPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "projects-export.csv";
+      link.download = "projects-export.xlsx";
       document.body.appendChild(link);
       link.click();
       link.remove();

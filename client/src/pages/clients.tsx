@@ -245,7 +245,7 @@ export default function ClientsPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "clients-export.csv";
+      link.download = "clients-export.xlsx";
       document.body.appendChild(link);
       link.click();
       link.remove();
