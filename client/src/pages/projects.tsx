@@ -43,7 +43,8 @@ import {
   BookOpen,
   Pencil,
   Calendar,
-  Search
+  Search,
+  Download
 } from "lucide-react";
 import { LayoutShell } from "@/components/layout-shell";
 import { useUser } from "@/hooks/use-auth";
@@ -66,6 +67,7 @@ export default function ProjectsPage() {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { data: user } = useUser();
@@ -273,6 +275,37 @@ export default function ProjectsPage() {
     }
   }, [currentPage, totalPages]);
 
+  const handleDownloadProjects = async () => {
+    try {
+      setIsDownloading(true);
+      const response = await fetch("/api/projects/export", {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to download projects export");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "projects-export.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to download projects export",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <LayoutShell user={user}>
       <div className="flex flex-col gap-4 mb-8">
@@ -287,25 +320,36 @@ export default function ProjectsPage() {
             </div>
           </div>
 
-          <Dialog open={open} onOpenChange={handleCloseDialog}>
-            <DialogTrigger asChild>
-              <Button 
-                data-testid="button-add-project"
-                className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg shadow-primary/25 transition-all duration-300"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Project
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>{editProject ? "Edit Project" : "Create New Project"}</DialogTitle>
-                <DialogDescription>
-                  {editProject ? "Update project details below." : "Add a new project with client and quotation details."}
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDownloadProjects}
+              disabled={isDownloading}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {isDownloading ? "Downloading..." : "Project List"}
+            </Button>
+
+            <Dialog open={open} onOpenChange={handleCloseDialog}>
+              <DialogTrigger asChild>
+                <Button 
+                  data-testid="button-add-project"
+                  className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg shadow-primary/25 transition-all duration-300"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Project
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>{editProject ? "Edit Project" : "Create New Project"}</DialogTitle>
+                  <DialogDescription>
+                    {editProject ? "Update project details below." : "Add a new project with client and quotation details."}
+                  </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                   <FormField
                     control={form.control}
                     name="projectName"
@@ -404,10 +448,11 @@ export default function ProjectsPage() {
                       ? (editProject ? "Updating..." : "Creating...") 
                       : (editProject ? "Update Project" : "Create Project")}
                   </Button>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         <div className="relative max-w-md">

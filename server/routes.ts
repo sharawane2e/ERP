@@ -10,6 +10,33 @@ import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 
+const formatSpreadsheetValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  return String(value);
+};
+
+const escapeCsvValue = (value: string) =>
+  value
+    .replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]/g, "")
+    .replace(/"/g, '""');
+
+const buildCsvExport = (
+  columns: string[],
+  rows: Array<Record<string, unknown>>,
+) => {
+  const header = columns.map((column) => `"${escapeCsvValue(column)}"`).join(",");
+  const lines = rows.map((row) =>
+    columns
+      .map((column) => `"${escapeCsvValue(formatSpreadsheetValue(row[column]))}"`)
+      .join(","),
+  );
+
+  return `\uFEFF${[header, ...lines].join("\r\n")}`;
+};
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -52,6 +79,47 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     const clients = await storage.getClients();
     res.json(clients);
+  });
+
+  app.get("/api/clients/export", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+
+    const clients = await storage.getClients();
+    const projects = await storage.getProjects();
+    const projectCountByClient = new Map<number, number>();
+
+    for (const project of projects) {
+      projectCountByClient.set(
+        project.clientId,
+        (projectCountByClient.get(project.clientId) ?? 0) + 1,
+      );
+    }
+
+    const rows = clients.map((client) => ({
+      "Client ID": client.id,
+      "Client Name": client.name,
+      Location: client.location,
+      "GST No": client.gstNo,
+      "Contact Person": client.contactPerson,
+      "Mobile Number": client.mobileNumber,
+      "Email Address": client.emailAddress,
+      "Project Count": projectCountByClient.get(client.id) ?? 0,
+    }));
+
+    const fileContent = buildCsvExport([
+      "Client ID",
+      "Client Name",
+      "Location",
+      "GST No",
+      "Contact Person",
+      "Mobile Number",
+      "Email Address",
+      "Project Count",
+    ], rows);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="clients-export.csv"');
+    res.send(fileContent);
   });
 
   app.get(api.clients.get.path.replace("/revira",""), async (req, res) => {
@@ -118,6 +186,36 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     const projects = await storage.getProjects();
     res.json(projects);
+  });
+
+  app.get("/api/projects/export", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+
+    const projects = await storage.getProjects();
+    const clients = await storage.getClients();
+    const clientNameById = new Map(clients.map((client) => [client.id, client.name]));
+
+    const rows = projects.map((project) => ({
+      "Project ID": project.id,
+      "Project Name": project.projectName,
+      Client: clientNameById.get(project.clientId) ?? "Unknown Client",
+      Location: project.location,
+      "Quotation Type": project.quotationType,
+      "Created At": project.createdAt,
+    }));
+
+    const fileContent = buildCsvExport([
+      "Project ID",
+      "Project Name",
+      "Client",
+      "Location",
+      "Quotation Type",
+      "Created At",
+    ], rows);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="projects-export.csv"');
+    res.send(fileContent);
   });
 
   app.get(api.projects.get.path.replace("/revira",""), async (req, res) => {

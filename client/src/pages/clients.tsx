@@ -24,7 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, Trash2, Pencil, Phone, Mail, MapPin, Building2, Search, Landmark } from "lucide-react";
+import { Plus, Users, Trash2, Pencil, Phone, Mail, MapPin, Building2, Search, Landmark, Download } from "lucide-react";
 import { LayoutShell } from "@/components/layout-shell";
 import { useUser } from "@/hooks/use-auth";
 import type { Client, Project } from "@shared/schema";
@@ -60,6 +60,7 @@ export default function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [infoDialogOpen, setInfoDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { data: user } = useUser();
@@ -229,6 +230,37 @@ export default function ClientsPage() {
     }
   }, [currentPage, totalPages]);
 
+  const handleDownloadClients = async () => {
+    try {
+      setIsDownloading(true);
+      const response = await fetch("/api/clients/export", {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to download clients export");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "clients-export.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to download clients export",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <LayoutShell user={user}>
       <div className="flex flex-col gap-4 mb-8">
@@ -245,32 +277,43 @@ export default function ClientsPage() {
             </div>
           </div>
 
-          <Dialog open={open} onOpenChange={handleCloseDialog}>
-            <DialogTrigger asChild>
-              <Button
-                data-testid="button-add-client"
-                className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg shadow-primary/25 transition-all duration-300"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Client
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>
-                  {editClient ? "Edit Client" : "Create New Client"}
-                </DialogTitle>
-                <DialogDescription>
-                  {editClient
-                    ? "Update client details below."
-                    : "Add a new client partner to your system."}
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form
-                  onSubmit={form.handleSubmit(onSubmit)}
-                  className="space-y-4"
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleDownloadClients}
+              disabled={isDownloading}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isDownloading ? "Downloading..." : "Client List"}
+            </Button>
+
+            <Dialog open={open} onOpenChange={handleCloseDialog}>
+              <DialogTrigger asChild>
+                <Button
+                  data-testid="button-add-client"
+                  className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg shadow-primary/25 transition-all duration-300"
                 >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Client
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editClient ? "Edit Client" : "Create New Client"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {editClient
+                      ? "Update client details below."
+                      : "Add a new client partner to your system."}
+                  </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                  <form
+                    onSubmit={form.handleSubmit(onSubmit)}
+                    className="space-y-4"
+                  >
                   <FormField
                     control={form.control}
                     name="name"
@@ -390,10 +433,11 @@ export default function ClientsPage() {
                         ? "Update Client"
                         : "Create Client"}
                   </Button>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         <div className="relative max-w-md">
