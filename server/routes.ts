@@ -10,6 +10,271 @@ import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 
+const formatSpreadsheetValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  return String(value);
+};
+
+const escapeSpreadsheetXml = (value: string) =>
+  value
+    .replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+
+const getExcelColumnName = (index: number) => {
+  let current = index + 1;
+  let name = "";
+
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    current = Math.floor((current - 1) / 26);
+  }
+
+  return name;
+};
+
+const crcTable = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let j = 0; j < 8; j += 1) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+const crc32 = (buffer: Buffer) => {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buffer.length; i += 1) {
+    crc = crcTable[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+};
+
+const createZipBuffer = (files: Array<{ name: string; content: string }>) => {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBuffer = Buffer.from(file.name, "utf8");
+    const contentBuffer = Buffer.from(file.content, "utf8");
+    const crc = crc32(contentBuffer);
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(0, 10);
+    localHeader.writeUInt16LE(0, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(contentBuffer.length, 18);
+    localHeader.writeUInt32LE(contentBuffer.length, 22);
+    localHeader.writeUInt16LE(nameBuffer.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+
+    localParts.push(localHeader, nameBuffer, contentBuffer);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(0, 12);
+    centralHeader.writeUInt16LE(0, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(contentBuffer.length, 20);
+    centralHeader.writeUInt32LE(contentBuffer.length, 24);
+    centralHeader.writeUInt16LE(nameBuffer.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+
+    centralParts.push(centralHeader, nameBuffer);
+    offset += localHeader.length + nameBuffer.length + contentBuffer.length;
+  }
+
+  const centralDirectory = Buffer.concat(centralParts);
+  const endRecord = Buffer.alloc(22);
+  endRecord.writeUInt32LE(0x06054b50, 0);
+  endRecord.writeUInt16LE(0, 4);
+  endRecord.writeUInt16LE(0, 6);
+  endRecord.writeUInt16LE(files.length, 8);
+  endRecord.writeUInt16LE(files.length, 10);
+  endRecord.writeUInt32LE(centralDirectory.length, 12);
+  endRecord.writeUInt32LE(offset, 16);
+  endRecord.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, centralDirectory, endRecord]);
+};
+
+const buildXlsxWorkbook = (
+  worksheetName: string,
+  columns: string[],
+  rows: Array<Record<string, unknown>>,
+) => {
+  const safeSheetName = worksheetName.replace(/[\\/*?:[\]]/g, "_").slice(0, 31) || "Sheet1";
+  const allStrings = [
+    ...columns,
+    ...rows.flatMap((row) => columns.map((column) => formatSpreadsheetValue(row[column]))),
+  ];
+
+  const sharedStringIndex = new Map<string, number>();
+  const sharedStrings: string[] = [];
+
+  for (const value of allStrings) {
+    if (!sharedStringIndex.has(value)) {
+      sharedStringIndex.set(value, sharedStrings.length);
+      sharedStrings.push(value);
+    }
+  }
+
+  const headerCells = columns
+    .map((column, index) => {
+      const ref = `${getExcelColumnName(index)}1`;
+      const valueIndex = sharedStringIndex.get(column) ?? 0;
+      return `<c r="${ref}" t="s" s="1"><v>${valueIndex}</v></c>`;
+    })
+    .join("");
+
+  const bodyRows = rows
+    .map((row, rowIndex) => {
+      const rowNumber = rowIndex + 2;
+      const cells = columns
+        .map((column, columnIndex) => {
+          const ref = `${getExcelColumnName(columnIndex)}${rowNumber}`;
+          const value = formatSpreadsheetValue(row[column]);
+          const valueIndex = sharedStringIndex.get(value) ?? 0;
+          return `<c r="${ref}" t="s" s="2"><v>${valueIndex}</v></c>`;
+        })
+        .join("");
+
+      return `<row r="${rowNumber}">${cells}</row>`;
+    })
+    .join("");
+
+  const lastColumn = getExcelColumnName(Math.max(columns.length - 1, 0));
+  const lastRow = Math.max(rows.length + 1, 1);
+
+  const worksheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:${lastColumn}${lastRow}"/>
+  <sheetViews>
+    <sheetView workbookViewId="0"/>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  <sheetData>
+    <row r="1">${headerCells}</row>
+    ${bodyRows}
+  </sheetData>
+</worksheet>`;
+
+  const sharedStringsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${allStrings.length}" uniqueCount="${sharedStrings.length}">
+  ${sharedStrings.map((value) => `<si><t xml:space="preserve">${escapeSpreadsheetXml(value)}</t></si>`).join("")}
+</sst>`;
+
+  return createZipBuffer([
+    {
+      name: "[Content_Types].xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`,
+    },
+    {
+      name: "_rels/.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    },
+    {
+      name: "xl/workbook.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="${escapeSpreadsheetXml(safeSheetName)}" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`,
+    },
+    {
+      name: "xl/_rels/workbook.xml.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+    },
+    {
+      name: "xl/styles.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><sz val="11"/><name val="Calibri"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill>
+      <patternFill patternType="solid">
+        <fgColor rgb="FFFFEBED"/>
+        <bgColor indexed="64"/>
+      </patternFill>
+    </fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border>
+      <left style="thin"><color rgb="FF000000"/></left>
+      <right style="thin"><color rgb="FF000000"/></right>
+      <top style="thin"><color rgb="FF000000"/></top>
+      <bottom style="thin"><color rgb="FF000000"/></bottom>
+      <diagonal/>
+    </border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`,
+    },
+    {
+      name: "xl/sharedStrings.xml",
+      content: sharedStringsXml,
+    },
+    {
+      name: "xl/worksheets/sheet1.xml",
+      content: worksheetXml,
+    },
+  ]);
+};
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -19,20 +284,21 @@ export async function registerRoutes(
   const resolveSmtpConfig = () => {
     const smtpHostRaw = process.env.SMTP_HOST?.trim();
     const smtpUserRaw = process.env.SMTP_USER?.trim();
+    const smtpPassRaw = process.env.SMTP_PASS?.trim();
     const smtpFromRaw = process.env.SMTP_FROM?.trim();
     const gmailUserRaw = process.env.GMAIL_USER?.trim();
     const gmailAppPasswordRaw = process.env.GMAIL_APP_PASSWORD?.trim();
 
-    const user = smtpUserRaw || gmailUserRaw;
-    const pass = gmailAppPasswordRaw;
-    const host = smtpHostRaw || (user ? "smtp.gmail.com" : undefined);
-    const port = Number(process.env.SMTP_PORT || (host === "smtp.gmail.com" ? 465 : 587));
+    const user = smtpUserRaw || gmailUserRaw || "info@reviranexgen.com";
+    const pass = smtpPassRaw || gmailAppPasswordRaw;
+    const host = smtpHostRaw || "mail.reviranexgen.com";
+    const port = Number(process.env.SMTP_PORT || 465);
     const from = smtpFromRaw || user;
 
     const missingKeys = [
       !host ? "SMTP_HOST" : null,
       !user ? "SMTP_USER or GMAIL_USER" : null,
-      !pass ? "GMAIL_APP_PASSWORD" : null,
+      !pass ? "SMTP_PASS or GMAIL_APP_PASSWORD" : null,
       !from ? "SMTP_FROM" : null,
     ].filter(Boolean) as string[];
 
@@ -51,6 +317,47 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     const clients = await storage.getClients();
     res.json(clients);
+  });
+
+  app.get("/api/clients/export", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+
+    const clients = await storage.getClients();
+    const projects = await storage.getProjects();
+    const projectCountByClient = new Map<number, number>();
+
+    for (const project of projects) {
+      projectCountByClient.set(
+        project.clientId,
+        (projectCountByClient.get(project.clientId) ?? 0) + 1,
+      );
+    }
+
+    const rows = clients.map((client) => ({
+      "Client ID": client.id,
+      "Client Name": client.name,
+      Location: client.location,
+      "GST No": client.gstNo,
+      "Contact Person": client.contactPerson,
+      "Mobile Number": client.mobileNumber,
+      "Email Address": client.emailAddress,
+      "Project Count": projectCountByClient.get(client.id) ?? 0,
+    }));
+
+    const fileContent = buildXlsxWorkbook("Clients", [
+      "Client ID",
+      "Client Name",
+      "Location",
+      "GST No",
+      "Contact Person",
+      "Mobile Number",
+      "Email Address",
+      "Project Count",
+    ], rows);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="clients-export.xlsx"');
+    res.send(fileContent);
   });
 
   app.get(api.clients.get.path.replace("/revira",""), async (req, res) => {
@@ -117,6 +424,47 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     const projects = await storage.getProjects();
     res.json(projects);
+  });
+
+  app.get("/api/projects/export", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+
+    const projects = await storage.getProjects();
+    const clients = await storage.getClients();
+    const clientNameById = new Map(clients.map((client) => [client.id, client.name]));
+    const projectBudgets = await Promise.all(
+      projects.map(async (project) => ({
+        projectId: project.id,
+        budget: await storage.getProjectLedgerBudget(project.id),
+      })),
+    );
+    const budgetByProjectId = new Map(
+      projectBudgets.map(({ projectId, budget }) => [projectId, budget?.projectValue ?? ""]),
+    );
+
+    const rows = projects.map((project) => ({
+      "Project ID": project.id,
+      "Project Name": project.projectName,
+      Client: clientNameById.get(project.clientId) ?? "Unknown Client",
+      Location: project.location,
+      "Quotation Type": project.quotationType,
+      Amount: budgetByProjectId.get(project.id) ?? "",
+      "Created At": project.createdAt,
+    }));
+
+    const fileContent = buildXlsxWorkbook("Projects", [
+      "Project ID",
+      "Project Name",
+      "Client",
+      "Location",
+      "Quotation Type",
+      "Amount",
+      "Created At",
+    ], rows);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="projects-export.xlsx"');
+    res.send(fileContent);
   });
 
   app.get(api.projects.get.path.replace("/revira",""), async (req, res) => {
@@ -199,6 +547,78 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     const entries = await storage.getProjectLedgerEntries(Number(req.params.projectId));
     res.json(entries);
+  });
+
+  app.get("/api/projects/:projectId/ledger/export", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+
+    const projectId = Number(req.params.projectId);
+    const project = await storage.getProject(projectId);
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    const [client, budget, entries] = await Promise.all([
+      storage.getClient(project.clientId),
+      storage.getProjectLedgerBudget(projectId),
+      storage.getProjectLedgerEntries(projectId),
+    ]);
+
+    const sortedEntries = [...entries].sort((a, b) => {
+      const dateDiff = new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return a.id - b.id;
+    });
+
+    let runningBalance = 0;
+    const rows = sortedEntries.map((entry) => {
+      const amount = Number(entry.amount) || 0;
+      runningBalance += entry.entryType === "receipt" ? amount : -amount;
+
+      return {
+        "Project Name": project.projectName,
+        Client: client?.name ?? "",
+        Location: project.location,
+        "Quotation Type": project.quotationType,
+        Budget: budget?.projectValue ?? "",
+        "Entry Date": entry.entryDate,
+        "Entry Type": entry.entryType,
+        Category: entry.category,
+        Description: entry.description,
+        Amount: entry.amount,
+        "Payment Mode": entry.paymentMode,
+        Reference: entry.reference ?? "",
+        "Received Against": entry.receivedAgainst ?? "",
+        Remarks: entry.remarks ?? "",
+        "Running Balance": runningBalance.toFixed(2),
+      };
+    });
+
+    const fileContent = buildXlsxWorkbook("Ledger Statement", [
+      "Project Name",
+      "Client",
+      "Location",
+      "Quotation Type",
+      "Budget",
+      "Entry Date",
+      "Entry Type",
+      "Category",
+      "Description",
+      "Amount",
+      "Payment Mode",
+      "Reference",
+      "Received Against",
+      "Remarks",
+      "Running Balance",
+    ], rows);
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="project-ledger-${projectId}-statement.xlsx"`,
+    );
+    res.send(fileContent);
   });
 
   app.post(api.ledger.createEntry.path.replace("/revira",""), async (req, res) => {
@@ -392,10 +812,23 @@ export async function registerRoutes(
   const handleSendDocumentEmail = async (
     req: any,
     res: any,
-    documentLabel: "quotation" | "invoice" | "gate pass" | "delivery challan"
+    documentLabel: "quotation" | "invoice" | "gate pass" | "delivery challan" | "bulk email"
   ) => {
     try {
       const emailSchema = z.string().email();
+      const stripHtml = (html: string) =>
+        html
+          .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, " ")
+          .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, " ")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/gi, " ")
+          .replace(/&amp;/gi, "&")
+          .replace(/&lt;/gi, "<")
+          .replace(/&gt;/gi, ">")
+          .replace(/&quot;/gi, '"')
+          .replace(/&#39;/gi, "'")
+          .replace(/\s+/g, " ")
+          .trim();
       const parseEmailList = (raw: string | string[]) => {
         const values = (Array.isArray(raw) ? raw : raw.split(/[,\s;]+/))
           .map((item) => item.trim())
@@ -407,6 +840,15 @@ export async function registerRoutes(
               code: z.ZodIssueCode.custom,
               path: ["to"],
               message: "Please provide at least one recipient email address.",
+            },
+          ]);
+        }
+        if (unique.length > 100) {
+          throw new z.ZodError([
+            {
+              code: z.ZodIssueCode.custom,
+              path: ["to"],
+              message: "Maximum 100 recipient email addresses are allowed.",
             },
           ]);
         }
@@ -427,9 +869,13 @@ export async function registerRoutes(
         to: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
         subject: z.string().min(1),
         message: z.string().min(1),
+        messageFormat: z.enum(["text", "html"]).optional(),
         fileName: z.string().min(1),
         pdfBase64: z.string().min(1),
       }).parse(req.body);
+      const messageFormat = input.messageFormat || "text";
+      const plainTextMessage =
+        messageFormat === "html" ? stripHtml(input.message) || " " : input.message;
       const recipients = parseEmailList(input.to);
       const copyRecipient = "reviranexgen@gmail.com";
       const normalizedCopyRecipient = copyRecipient.toLowerCase();
@@ -494,8 +940,10 @@ export async function registerRoutes(
         const base64 = (v: string) => Buffer.from(v, "utf8").toString("base64");
         const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         const wrap76 = (value: string) => value.replace(/(.{1,76})/g, "$1\r\n").trim();
-        const safeText = input.message.replace(/\r?\n/g, "\r\n");
+        const safeText = plainTextMessage.replace(/\r?\n/g, "\r\n");
+        const safeHtml = input.message.replace(/\r?\n/g, "\r\n");
         const attachmentBase64 = wrap76(input.pdfBase64);
+        const hasHtml = messageFormat === "html";
         const messageData =
           [
             `From: ${smtpFrom}`,
@@ -505,11 +953,32 @@ export async function registerRoutes(
             `Content-Type: multipart/mixed; boundary="${boundary}"`,
             "",
             `--${boundary}`,
-            'Content-Type: text/plain; charset="utf-8"',
-            "Content-Transfer-Encoding: 7bit",
-            "",
-            safeText,
-            "",
+            ...(hasHtml
+              ? [
+                  `Content-Type: multipart/alternative; boundary="${boundary}_alt"`,
+                  "",
+                  `--${boundary}_alt`,
+                  'Content-Type: text/plain; charset="utf-8"',
+                  "Content-Transfer-Encoding: 7bit",
+                  "",
+                  safeText,
+                  "",
+                  `--${boundary}_alt`,
+                  'Content-Type: text/html; charset="utf-8"',
+                  "Content-Transfer-Encoding: 7bit",
+                  "",
+                  safeHtml,
+                  "",
+                  `--${boundary}_alt--`,
+                  "",
+                ]
+              : [
+                  'Content-Type: text/plain; charset="utf-8"',
+                  "Content-Transfer-Encoding: 7bit",
+                  "",
+                  safeText,
+                  "",
+                ]),
             `--${boundary}`,
             `Content-Type: application/pdf; name="${input.fileName}"`,
             "Content-Transfer-Encoding: base64",
@@ -567,7 +1036,8 @@ export async function registerRoutes(
           to: toRecipients,
           bcc: bccRecipients,
           subject: input.subject,
-          text: input.message,
+          text: plainTextMessage,
+          html: messageFormat === "html" ? input.message : undefined,
           attachments: [
             {
               filename: input.fileName,
@@ -641,6 +1111,11 @@ export async function registerRoutes(
   app.post("/api/delivery-challans/:id/send-email", async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
     return handleSendDocumentEmail(req, res, "delivery challan");
+  });
+
+  app.post("/api/email/bulk", async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Unauthorized" });
+    return handleSendDocumentEmail(req, res, "bulk email");
   });
 
   app.post("/api/email/test-smtp", async (req, res) => {
@@ -760,7 +1235,7 @@ export async function registerRoutes(
       };
       const clickFirstVisible = async (page: any, selectors: string[]) => {
         for (const selector of selectors) {
-          const clicked = await page.evaluate((sel) => {
+          const clicked = await page.evaluate((sel: string) => {
             const nodes = Array.from(document.querySelectorAll(sel)) as HTMLElement[];
             const target = nodes.find((el) => {
               const style = window.getComputedStyle(el);

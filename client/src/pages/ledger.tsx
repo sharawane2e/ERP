@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ArrowLeft, Wallet, TrendingDown, TrendingUp, Scale, Landmark, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Wallet, TrendingDown, TrendingUp, Scale, Landmark, Pencil, Trash2, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type LedgerEntry = {
@@ -71,6 +71,7 @@ export default function LedgerPage() {
   const [editingExpenseId, setEditingExpenseId] = useState<number | null>(null);
   const [editingReceiptId, setEditingReceiptId] = useState<number | null>(null);
   const [entryToDelete, setEntryToDelete] = useState<LedgerEntry | null>(null);
+  const [isDownloadingStatement, setIsDownloadingStatement] = useState(false);
   const [expense, setExpense] = useState({
     entryDate: new Date().toISOString().split("T")[0],
     category: "",
@@ -346,6 +347,37 @@ export default function LedgerPage() {
     });
   };
 
+  const handleDownloadStatement = async () => {
+    try {
+      setIsDownloadingStatement(true);
+      const response = await fetch(`/revira/api/projects/${projectId}/ledger/export`, {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to download ledger statement");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `project-ledger-${projectId}-statement.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to download ledger statement",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloadingStatement(false);
+    }
+  };
+
   if (projectLoading) {
     return (
       <LayoutShell user={user}>
@@ -380,6 +412,16 @@ export default function LedgerPage() {
               <p className="text-xs sm:text-sm text-slate-500 break-words">{project.projectName} {client ? `- ${client.name}` : ""}</p>
             </div>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleDownloadStatement}
+            disabled={isDownloadingStatement}
+            className="shrink-0"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {isDownloadingStatement ? "Downloading..." : "Download Statement"}
+          </Button>
         </div>
 
         <Card className="border-[#eeb7b7]">

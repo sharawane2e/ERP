@@ -155,11 +155,7 @@ export default function LoginPage() {
       </div>
       
       {/* Footer Credentials Hint (Development Only) */}
-      <div className="fixed bottom-4 right-4 bg-slate-900/90 text-slate-300 p-4 rounded-lg backdrop-blur text-xs hidden lg:block shadow-xl">
-        <p className="font-bold text-white mb-1">Demo Credentials:</p>
-        <p>User: admin@reviranexgen.com</p>
-        <p>Pass: Admin@121</p>
-      </div>
+
     </div>
   );
 }
